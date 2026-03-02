@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">auto_proxy_vpn</h1>
+  <h1 align="center">Auto proxy vpn</h1>
   <p align="center">
     On-demand proxies and VPNs across multiple cloud providers — from a single Python call.
   </p>
@@ -11,8 +11,11 @@
   <a href="#supported-providers">Providers</a> &nbsp;·&nbsp;
   <a href="#proxy-pool">Proxy Pool</a> &nbsp;·&nbsp;
   <a href="#api-reference">API Reference</a> &nbsp;·&nbsp;
-  <a href="#limitations">Limitations</a> &nbsp;·&nbsp;
+  <a href="#limitations">Limitations</a>
+<!-- hide-nav-contributing -->
+ &nbsp;·&nbsp;
   <a href="#contributing">Contributing</a>
+<!-- /hide-nav-contributing -->
 </p>
 
 ---
@@ -169,9 +172,9 @@ Each provider has its own README with step-by-step credential setup, full API re
 
 | Provider | Guide |
 |---|---|
-| Google Cloud | [providers/google/README.md](auto_proxy_vpn/providers/google/README.md) |
-| Azure | [providers/azure/README.md](auto_proxy_vpn/providers/azure/README.md) |
-| DigitalOcean | [providers/digitalocean/README.md](auto_proxy_vpn/providers/digitalocean/README.md) |
+| Google Cloud | [Google docs](auto_proxy_vpn/providers/google/README.md) |
+| Azure | [Azure docs](auto_proxy_vpn/providers/azure/README.md) |
+| DigitalOcean | [DigitalOcean docs](auto_proxy_vpn/providers/digitalocean/README.md) |
 
 > **Security:** All guides recommend storing credentials in a `.env` file (never via `export` in shell history or committed to version control). See each provider README for details.
 
@@ -508,6 +511,7 @@ auto_proxy_vpn/
     └── util.py              # Public IP detection
 ```
 
+<!-- hide-contributing -->
 ---
 
 ## Contributing

@@ -83,4 +83,4 @@ lexers['dotenv'] = BashLexer()
 
 html_theme = 'furo'
 html_static_path = ['_static']
-html_title = 'auto_proxy_vpn'
+html_title = 'auto proxy vpn'

@@ -8,10 +8,24 @@ from auto_proxy_vpn import CloudProvider
 from auto_proxy_vpn.utils.base_proxy import BaseProxyManager
 
 class ProxyManagers(ABC):
+    """Central registry for provider-specific proxy manager classes.
+
+    This class stores a mapping between :class:`CloudProvider` values and the
+    corresponding manager class that handles proxy creation for that provider.
+    Manager implementations register themselves through the
+    :meth:`register` decorator.
+
+    Notes
+    -----
+    - Registration is global for the current Python process.
+    - A provider can only be registered once.
+    """
+
     _registry: ClassVar[dict[CloudProvider, type["BaseProxyManager"]]] = {}
 
     @classmethod
     def register(cls, provider: CloudProvider):
+        """Class decorator to register a proxy manager class for a specific cloud provider."""
         def decorator(subclass):
             if provider in cls._registry:
                 raise ValueError(f"{provider} already registered")
@@ -21,11 +35,34 @@ class ProxyManagers(ABC):
     
     @classmethod
     def get_manager(cls, provider: CloudProvider) -> type["BaseProxyManager"]:
+        """Return the registered manager class for a cloud provider.
+
+        Parameters
+        ----------
+        provider : CloudProvider
+            Provider whose manager class is requested.
+
+        Returns
+        -------
+        type[BaseProxyManager]
+            Registered manager class for ``provider``.
+
+        Raises
+        ------
+        ValueError
+            If no manager class is registered for ``provider``.
+        """
         if provider not in cls._registry:
             raise ValueError(f"No manager registered for {provider}")
         return cls._registry[provider]
 
 def import_provider_modules():
+    """Import provider packages so manager classes self-register.
+
+    This helper discovers allowed provider modules under
+    ``auto_proxy_vpn.providers`` and imports each one. Import side effects are
+    expected to execute ``@ProxyManagers.register(...)`` decorators.
+    """
     package_name = 'auto_proxy_vpn.providers'
     current_dir = Path(__file__).resolve().parent
     allowed_packages = {x.value for x in CloudProvider}

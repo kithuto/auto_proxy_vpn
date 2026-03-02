@@ -98,6 +98,9 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# docs
+# docs/_build/
+
 .env
 *.json
 ssh_keys
