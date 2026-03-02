@@ -1,0 +1,2 @@
+from .digitalocean_proxy import ProxyManagerDigitalOcean, DigitalOceanProxy
+from .digitalocean_vpn import VPNManagerDigitalOcean, DigitalOceanVpn
