@@ -12,6 +12,8 @@ This guide will help you get up and running quickly.
 - [Project Structure](#project-structure)
 - [Coding Guidelines](#coding-guidelines)
 - [Adding a New Cloud Provider](#adding-a-new-cloud-provider)
+- [Testing](#testing)
+- [Updating Documentation](#updating-documentation)
 - [Submitting a Pull Request](#submitting-a-pull-request)
 - [License](#license)
 
@@ -254,6 +256,86 @@ Create a `README.md` inside your provider package. Check out the existing ones (
 
 ---
 
+## Testing
+
+The project has a comprehensive test suite built with [pytest](https://docs.pytest.org/). For the full testing guide — including how to run tests, write new ones, mock providers, and set up integration tests — see the **[Testing documentation](docs/testing.md)**.
+
+The quick version:
+
+```bash
+# Install test deps and run unit tests
+pip install -e ".[test]"
+pytest
+```
+
+All unit tests are fully mocked and run in seconds with no cloud credentials. See the [tests/README.md](tests/README.md) for more.
+
+---
+
+## Updating Documentation
+
+The project uses [Sphinx](https://www.sphinx-doc.org/) with the [furo](https://pradyunsg.me/furo/) theme to generate HTML documentation from:
+
+- **Markdown files** — `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, and each provider's `README.md`  are pulled into Sphinx via [MyST-Parser](https://myst-parser.readthedocs.io/).
+- **Docstrings** — API reference pages are auto-generated from NumPy-style docstrings in the source code.
+
+### Install docs dependencies
+
+```bash
+pip install sphinx furo myst-parser sphinx-autodoc-typehints
+```
+
+### Build the docs locally
+
+```bash
+cd docs
+make html          # output lands in docs/_build/html/
+```
+
+Open `docs/_build/html/index.html` in your browser to preview.
+
+### When should you update docs?
+
+- **Changed a public API** (new parameter, renamed method, new class) → update the docstring in the source file. Sphinx picks it up automatically on the next build.
+- **Added a new provider** → create a `README.md` inside your provider package, then add a MyST include wrapper at `docs/providers/<provider>.md`:
+
+  ```markdown
+  ```{include} ../../auto_proxy_vpn/providers/<provider>/README.md
+  ```
+  ```
+
+  And register it in `docs/index.rst` under the *Provider Guides* toctree.
+
+- **Edited README.md or CONTRIBUTING.md** → the Sphinx docs include these files automatically, so your changes will appear after a rebuild. Note that `docs/readme.md` uses split includes (`:end-before:` / `:start-after:`) to adapt some sections for Sphinx — if you add or move major sections in `README.md`, check that the include markers still align.
+
+### Docs structure at a glance
+
+```
+docs/
+├── conf.py              # Sphinx configuration
+├── index.rst            # Main toctree
+├── readme.md            # Includes ../README.md (with split sections)
+├── contributing.md       # Includes ../CONTRIBUTING.md
+├── security.md          # Includes ../SECURITY.md
+├── providers/
+│   ├── google.md        # Includes Google provider README
+│   ├── azure.md         # Includes Azure provider README
+│   └── digitalocean.md  # Includes DigitalOcean provider README
+└── api/
+    ├── core.rst         # ProxyPool, ProxyManagers, CloudProvider
+    ├── configs.rst      # Config dataclasses
+    ├── providers.rst    # Provider manager & proxy classes
+    └── utils.rst        # Base classes, SSH, utilities
+```
+
+### Tips
+
+- Run `make clean html` (not just `make html`) when you change the structure — Sphinx caches aggressively.
+- The build should finish with **0 warnings**. If you see new warnings, fix them before submitting.
+- Docstrings must use **NumPy style** with the `param : type` format (see [Coding Guidelines](#coding-guidelines) above).
+
+---
+
 ## Submitting a Pull Request
 
 1. **Rebase on `main`** before submitting:
@@ -271,4 +353,4 @@ Create a `README.md` inside your provider package. Check out the existing ones (
 
 5. I'll review it as soon as I can. If I request changes, just push updates to the same branch.
 
-6. Once everything looks good, I'll squash-merge it into `main`.
+6. Once everything looks good, I'll merge it into `main`.

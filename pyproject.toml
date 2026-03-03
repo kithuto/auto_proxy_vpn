@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auto_proxy_vpn"
+version = "0.0.1"
+description = "A package to create on demand proxies and vpns in different cloud providers."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = ["requests"]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+    "responses>=0.23",
+]
+google = ["google-cloud-compute"]
+azure = [
+    "azure-identity",
+    "azure-mgmt-subscription",
+    "azure-mgmt-resource",
+    "azure-mgmt-network",
+    "azure-mgmt-compute",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: Unit tests with mocked dependencies (run by default)",
+    "integration: Integration tests requiring real cloud credentials (skipped by default)",
+    "digitalocean: Tests requiring a DigitalOcean token",
+    "google: Tests requiring Google Cloud credentials",
+    "azure: Tests requiring Azure credentials",
+    "slow: Tests that take a long time to run",
+]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "-m", "not integration",
+    "--tb=short",
+]
+
+[tool.coverage.run]
+source = ["auto_proxy_vpn"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 60

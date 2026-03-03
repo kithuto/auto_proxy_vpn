@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Security Policy" href="security.html"><link rel="prev" title="Table of Contents" href="readme.html">
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Testing" href="testing.html"><link rel="prev" title="Table of Contents" href="readme.html">
 
     <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
         <title>Contributing to auto_proxy_vpn - auto proxy vpn</title>
@@ -202,6 +202,7 @@
 <li class="toctree-l1"><a class="reference internal" href="readme.html#limitations">Limitations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="readme.html#project-structure">Project Structure</a></li>
 <li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Contributing to auto_proxy_vpn</a></li>
+<li class="toctree-l1"><a class="reference internal" href="testing.html">Testing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="security.html">Security Policy</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Provider Guides</span></p>
@@ -267,6 +268,8 @@
 <li><p><a class="reference internal" href="#project-structure">Project Structure</a></p></li>
 <li><p><a class="reference internal" href="#coding-guidelines">Coding Guidelines</a></p></li>
 <li><p><a class="reference internal" href="#adding-a-new-cloud-provider">Adding a New Cloud Provider</a></p></li>
+<li><p><a class="reference internal" href="#testing">Testing</a></p></li>
+<li><p><a class="reference internal" href="#updating-documentation">Updating Documentation</a></p></li>
 <li><p><a class="reference internal" href="#submitting-a-pull-request">Submitting a Pull Request</a></p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/library/constants.html#license" title="Python 3.14"><span class="xref myst">License</span></a></p></li>
 </ul>
@@ -530,6 +533,86 @@ git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </
 </section>
 </section>
 <hr class="docutils" />
+<section id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Link to this heading">¶</a></h2>
+<p>The project has a comprehensive test suite built with <a class="reference external" href="https://docs.pytest.org/">pytest</a>. For the full testing guide — including how to run tests, write new ones, mock providers, and set up integration tests — see the <strong><a class="reference internal" href="#docs/testing.md"><span class="xref myst">Testing documentation</span></a></strong>.</p>
+<p>The quick version:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install test deps and run unit tests</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[test]&quot;</span>
+pytest
+</pre></div>
+</div>
+<p>All unit tests are fully mocked and run in seconds with no cloud credentials. See the <a class="reference internal" href="#tests/README.md"><span class="xref myst">tests/README.md</span></a> for more.</p>
+</section>
+<hr class="docutils" />
+<section id="updating-documentation">
+<h2>Updating Documentation<a class="headerlink" href="#updating-documentation" title="Link to this heading">¶</a></h2>
+<p>The project uses <a class="reference external" href="https://www.sphinx-doc.org/">Sphinx</a> with the <a class="reference external" href="https://pradyunsg.me/furo/">furo</a> theme to generate HTML documentation from:</p>
+<ul class="simple">
+<li><p><strong>Markdown files</strong> — <code class="docutils literal notranslate"><span class="pre">README.md</span></code>, <code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code>, <code class="docutils literal notranslate"><span class="pre">SECURITY.md</span></code>, and each provider’s <code class="docutils literal notranslate"><span class="pre">README.md</span></code>  are pulled into Sphinx via <a class="reference external" href="https://myst-parser.readthedocs.io/">MyST-Parser</a>.</p></li>
+<li><p><strong>Docstrings</strong> — API reference pages are auto-generated from NumPy-style docstrings in the source code.</p></li>
+</ul>
+<section id="install-docs-dependencies">
+<h3>Install docs dependencies<a class="headerlink" href="#install-docs-dependencies" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>sphinx<span class="w"> </span>furo<span class="w"> </span>myst-parser<span class="w"> </span>sphinx-autodoc-typehints
+</pre></div>
+</div>
+</section>
+<section id="build-the-docs-locally">
+<h3>Build the docs locally<a class="headerlink" href="#build-the-docs-locally" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>docs
+make<span class="w"> </span>html<span class="w">          </span><span class="c1"># output lands in docs/_build/html/</span>
+</pre></div>
+</div>
+<p>Open <code class="docutils literal notranslate"><span class="pre">docs/_build/html/index.html</span></code> in your browser to preview.</p>
+</section>
+<section id="when-should-you-update-docs">
+<h3>When should you update docs?<a class="headerlink" href="#when-should-you-update-docs" title="Link to this heading">¶</a></h3>
+<ul>
+<li><p><strong>Changed a public API</strong> (new parameter, renamed method, new class) → update the docstring in the source file. Sphinx picks it up automatically on the next build.</p></li>
+<li><p><strong>Added a new provider</strong> → create a <code class="docutils literal notranslate"><span class="pre">README.md</span></code> inside your provider package, then add a MyST include wrapper at <code class="docutils literal notranslate"><span class="pre">docs/providers/&lt;provider&gt;.md</span></code>:</p>
+<div class="highlight-markdown notranslate"><div class="highlight"><pre><span></span>```{include} ../../auto_proxy_vpn/providers/&lt;provider&gt;/README.md
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>
+And register it in `docs/index.rst` under the *Provider Guides* toctree.
+
+</pre></div>
+</div>
+</li>
+<li><p><strong>Edited README.md or CONTRIBUTING.md</strong> → the Sphinx docs include these files automatically, so your changes will appear after a rebuild. Note that <code class="docutils literal notranslate"><span class="pre">docs/readme.md</span></code> uses split includes (<code class="docutils literal notranslate"><span class="pre">:end-before:</span></code> / <code class="docutils literal notranslate"><span class="pre">:start-after:</span></code>) to adapt some sections for Sphinx — if you add or move major sections in <code class="docutils literal notranslate"><span class="pre">README.md</span></code>, check that the include markers still align.</p></li>
+</ul>
+</section>
+<section id="docs-structure-at-a-glance">
+<h3>Docs structure at a glance<a class="headerlink" href="#docs-structure-at-a-glance" title="Link to this heading">¶</a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>docs/
+├── conf.py              # Sphinx configuration
+├── index.rst            # Main toctree
+├── readme.md            # Includes ../README.md (with split sections)
+├── contributing.md       # Includes ../CONTRIBUTING.md
+├── security.md          # Includes ../SECURITY.md
+├── providers/
+│   ├── google.md        # Includes Google provider README
+│   ├── azure.md         # Includes Azure provider README
+│   └── digitalocean.md  # Includes DigitalOcean provider README
+└── api/
+    ├── core.rst         # ProxyPool, ProxyManagers, CloudProvider
+    ├── configs.rst      # Config dataclasses
+    ├── providers.rst    # Provider manager &amp; proxy classes
+    └── utils.rst        # Base classes, SSH, utilities
+</pre></div>
+</div>
+</section>
+<section id="tips">
+<h3>Tips<a class="headerlink" href="#tips" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">clean</span> <span class="pre">html</span></code> (not just <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">html</span></code>) when you change the structure — Sphinx caches aggressively.</p></li>
+<li><p>The build should finish with <strong>0 warnings</strong>. If you see new warnings, fix them before submitting.</p></li>
+<li><p>Docstrings must use <strong>NumPy style</strong> with the <code class="docutils literal notranslate"><span class="pre">param</span> <span class="pre">:</span> <span class="pre">type</span></code> format (see <a class="reference internal" href="#coding-guidelines">Coding Guidelines</a> above).</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
 <section id="submitting-a-pull-request">
 <h2>Submitting a Pull Request<a class="headerlink" href="#submitting-a-pull-request" title="Link to this heading">¶</a></h2>
 <ol class="arabic">
@@ -543,7 +626,7 @@ git<span class="w"> </span>rebase<span class="w"> </span>origin/main
 <li><p><strong>Write a clear PR description</strong> — what it does, why, and whether there are any breaking changes.</p></li>
 <li><p><strong>Keep it focused</strong> — one feature or fix per PR. Smaller PRs are easier (and faster) to review.</p></li>
 <li><p>I’ll review it as soon as I can. If I request changes, just push updates to the same branch.</p></li>
-<li><p>Once everything looks good, I’ll squash-merge it into <code class="docutils literal notranslate"><span class="pre">main</span></code>.</p></li>
+<li><p>Once everything looks good, I’ll merge it into <code class="docutils literal notranslate"><span class="pre">main</span></code>.</p></li>
 </ol>
 </section>
 </section>
@@ -553,12 +636,12 @@ git<span class="w"> </span>rebase<span class="w"> </span>origin/main
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="security.html">
+          <a class="next-page" href="testing.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Security Policy</div>
+                <div class="title">Testing</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -628,6 +711,15 @@ git<span class="w"> </span>rebase<span class="w"> </span>origin/main
 <li><a class="reference internal" href="#add-a-config-dataclass">4. Add a config dataclass</a></li>
 <li><a class="reference internal" href="#export-from-the-provider-s-init-py">5. Export from the provider’s <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code></a></li>
 <li><a class="reference internal" href="#add-a-provider-readme">6. Add a provider README</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#testing">Testing</a></li>
+<li><a class="reference internal" href="#updating-documentation">Updating Documentation</a><ul>
+<li><a class="reference internal" href="#install-docs-dependencies">Install docs dependencies</a></li>
+<li><a class="reference internal" href="#build-the-docs-locally">Build the docs locally</a></li>
+<li><a class="reference internal" href="#when-should-you-update-docs">When should you update docs?</a></li>
+<li><a class="reference internal" href="#docs-structure-at-a-glance">Docs structure at a glance</a></li>
+<li><a class="reference internal" href="#tips">Tips</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#submitting-a-pull-request">Submitting a Pull Request</a></li>

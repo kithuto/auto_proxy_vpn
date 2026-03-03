@@ -9,6 +9,7 @@ On-demand proxies and VPNs across multiple cloud providers — from a single Pyt
 
    readme
    contributing
+   testing
    security
 
 .. toctree::

@@ -522,4 +522,5 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) guide 
 - Development setup and workflow
 - Coding guidelines and style conventions
 - Adding a new cloud provider (step-by-step)
+- Building and updating the Sphinx documentation
 - Pull request process
