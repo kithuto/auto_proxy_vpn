@@ -13,17 +13,17 @@ on:
         default: false
         type: boolean
       run_digitalocean_tests:
-        description: 'Run DigitalOcean integration tests (subset of all integration tests)'
+        description: 'Run DigitalOcean integration tests'
         required: true
         default: false
         type: boolean
       run_google_tests:
-        description: 'Run Google Cloud integration tests (subset of all integration tests)'
+        description: 'Run Google Cloud integration tests'
         required: true
         default: false
         type: boolean
       run_azure_tests:
-        description: 'Run Azure integration tests (subset of all integration tests)'
+        description: 'Run Azure integration tests'
         required: true
         default: false
         type: boolean
