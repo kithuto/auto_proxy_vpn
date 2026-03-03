@@ -11,8 +11,8 @@ This guide will help you get up and running quickly.
 - [Development Setup](#development-setup)
 - [Project Structure](#project-structure)
 - [Coding Guidelines](#coding-guidelines)
-- [Adding a New Cloud Provider](#adding-a-new-cloud-provider)
-- [Testing](#testing)
+- [Adding a New Cloud Provider](#adding-a-new-cloud-provider)<!-- hide testing menu --> 
+- [Testing](#testing)<!-- /hide testing menu -->
 - [Updating Documentation](#updating-documentation)
 - [Submitting a Pull Request](#submitting-a-pull-request)
 - [License](#license)
@@ -253,12 +253,12 @@ from .your_provider_proxy import ProxyManagerYourProvider, YourProviderProxy
 Create a `README.md` inside your provider package. Check out the existing ones (e.g. `providers/azure/README.md`) for the format.
 
 > **Tip:** Looking at an existing provider like DigitalOcean or Azure is the fastest way to understand how everything fits together.
-
+<!-- hide testing -->
 ---
 
 ## Testing
 
-The project has a comprehensive test suite built with [pytest](https://docs.pytest.org/). For the full testing guide — including how to run tests, write new ones, mock providers, and set up integration tests — see the **[Testing documentation](docs/testing.md)**.
+The project has a comprehensive test suite built with [pytest](https://docs.pytest.org/). For the full testing guide — including how to run tests, write new ones, mock providers, and set up integration tests — see the **[Testing documentation](tests/README.md)**.
 
 The quick version:
 
@@ -267,9 +267,7 @@ The quick version:
 pip install -e ".[test]"
 pytest
 ```
-
-All unit tests are fully mocked and run in seconds with no cloud credentials. See the [tests/README.md](tests/README.md) for more.
-
+<!-- /hide testing -->
 ---
 
 ## Updating Documentation

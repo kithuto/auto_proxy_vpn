@@ -586,26 +586,7 @@ pytest<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;i
 </pre></div>
 </div>
 </section>
-</section>
 <hr class="docutils" />
-<section id="continuous-integration">
-<h2>Continuous Integration<a class="headerlink" href="#continuous-integration" title="Link to this heading">¶</a></h2>
-<p>The GitHub Actions workflow (<code class="docutils literal notranslate"><span class="pre">.github/workflows/tests.yml</span></code>) automates testing on every push and pull request targeting <code class="docutils literal notranslate"><span class="pre">main</span></code>.</p>
-<section id="pipeline-overview">
-<h3>Pipeline Overview<a class="headerlink" href="#pipeline-overview" title="Link to this heading">¶</a></h3>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Push / PR to main
-│
-├─ Unit Tests ──────────────────────────── runs on every push &amp; PR
-│   Matrix: Python 3.9, 3.10, 3.11, 3.12
-│   Uploads: JUnit XML results + coverage report (XML)
-│
-└─ Integration Tests ──────────────────── runs on push to main only
-    ├─ DigitalOcean (requires secrets)
-    ├─ Google Cloud  (requires secrets)
-    └─ Azure         (requires secrets)
-</pre></div>
-</div>
-</section>
 <section id="github-secrets">
 <h3>GitHub Secrets<a class="headerlink" href="#github-secrets" title="Link to this heading">¶</a></h3>
 <p>To enable integration tests in CI, configure these repository secrets under <strong>Settings → Secrets and variables → Actions</strong>:</p>
@@ -757,10 +738,6 @@ open<span class="w"> </span>htmlcov/index.html
 <li><a class="reference internal" href="#conventions">Conventions</a></li>
 <li><a class="reference internal" href="#adding-tests-for-a-new-provider">Adding Tests for a New Provider</a></li>
 <li><a class="reference internal" href="#test-naming">Test Naming</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#continuous-integration">Continuous Integration</a><ul>
-<li><a class="reference internal" href="#pipeline-overview">Pipeline Overview</a></li>
 <li><a class="reference internal" href="#github-secrets">GitHub Secrets</a></li>
 </ul>
 </li>

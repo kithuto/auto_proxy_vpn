@@ -268,7 +268,8 @@
 <li><p><a class="reference internal" href="#project-structure">Project Structure</a></p></li>
 <li><p><a class="reference internal" href="#coding-guidelines">Coding Guidelines</a></p></li>
 <li><p><a class="reference internal" href="#adding-a-new-cloud-provider">Adding a New Cloud Provider</a></p></li>
-<li><p><a class="reference internal" href="#testing">Testing</a></p></li>
+</ul>
+<ul class="simple">
 <li><p><a class="reference internal" href="#updating-documentation">Updating Documentation</a></p></li>
 <li><p><a class="reference internal" href="#submitting-a-pull-request">Submitting a Pull Request</a></p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/library/constants.html#license" title="Python 3.14"><span class="xref myst">License</span></a></p></li>
@@ -533,18 +534,6 @@ git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </
 </section>
 </section>
 <hr class="docutils" />
-<section id="testing">
-<h2>Testing<a class="headerlink" href="#testing" title="Link to this heading">¶</a></h2>
-<p>The project has a comprehensive test suite built with <a class="reference external" href="https://docs.pytest.org/">pytest</a>. For the full testing guide — including how to run tests, write new ones, mock providers, and set up integration tests — see the <strong><a class="reference internal" href="#docs/testing.md"><span class="xref myst">Testing documentation</span></a></strong>.</p>
-<p>The quick version:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install test deps and run unit tests</span>
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[test]&quot;</span>
-pytest
-</pre></div>
-</div>
-<p>All unit tests are fully mocked and run in seconds with no cloud credentials. See the <a class="reference internal" href="#tests/README.md"><span class="xref myst">tests/README.md</span></a> for more.</p>
-</section>
-<hr class="docutils" />
 <section id="updating-documentation">
 <h2>Updating Documentation<a class="headerlink" href="#updating-documentation" title="Link to this heading">¶</a></h2>
 <p>The project uses <a class="reference external" href="https://www.sphinx-doc.org/">Sphinx</a> with the <a class="reference external" href="https://pradyunsg.me/furo/">furo</a> theme to generate HTML documentation from:</p>
@@ -713,7 +702,6 @@ git<span class="w"> </span>rebase<span class="w"> </span>origin/main
 <li><a class="reference internal" href="#add-a-provider-readme">6. Add a provider README</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#testing">Testing</a></li>
 <li><a class="reference internal" href="#updating-documentation">Updating Documentation</a><ul>
 <li><a class="reference internal" href="#install-docs-dependencies">Install docs dependencies</a></li>
 <li><a class="reference internal" href="#build-the-docs-locally">Build the docs locally</a></li>
