@@ -5,6 +5,7 @@ setup(
    version='0.0.1',
    author='Ignasi Rovira',
    packages=find_packages(),
+   python_requires='>=3.9',
    install_requires=['requests'],
-   description='A package to create on demand proxies and vpns in diferent cloud providers.'
+   description='A package to create on demand proxies and vpns in different cloud providers.'
 )

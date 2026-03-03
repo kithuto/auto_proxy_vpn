@@ -1,32 +1,16 @@
 name: Tests
 
 on:
-#  push:
-#    branches: [main]
+  push:
+    branches: [dev]
   pull_request:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      run_integration:
-        description: 'Run integration tests'
-        required: true
-        default: false
-        type: boolean
-      run_digitalocean_tests:
-        description: 'Run DigitalOcean integration tests'
-        required: true
-        default: false
-        type: boolean
-      run_google_tests:
-        description: 'Run Google Cloud integration tests'
-        required: true
-        default: false
-        type: boolean
-      run_azure_tests:
-        description: 'Run Azure integration tests'
-        required: true
-        default: false
-        type: boolean
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - 'docs/**'
+      - '.github/**'
+      - '**.md'
 
 permissions:
   contents: read
@@ -44,7 +28,8 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -74,90 +59,4 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
-  # -----------------------------------------------------------------------
-  # Integration tests — manual only (triggered via workflow_dispatch)
-  # -----------------------------------------------------------------------
-  integration-tests-do:
-    name: Integration — DigitalOcean
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && (inputs.run_integration || inputs.run_digitalocean_tests)
-    needs: unit-tests
-    environment: integration
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test]"
-
-      - name: Run DigitalOcean integration tests
-        env:
-          DIGITALOCEAN_API_TOKEN: ${{ secrets.DIGITALOCEAN_API_TOKEN }}
-          DO_SSH_KEY_NAME: ${{ secrets.DO_SSH_KEY_NAME }}
-        run: |
-          pytest tests/integration/test_digitalocean_real.py -m "integration and digitalocean" -v --tb=short
-
-  integration-tests-google:
-    name: Integration — Google Cloud
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && (inputs.run_integration || inputs.run_google_tests)
-    needs: unit-tests
-    environment: integration
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test,google]"
-
-      - name: Run Google Cloud integration tests
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          GOOGLE_PROJECT: ${{ secrets.GOOGLE_PROJECT }}
-          GOOGLE_SSH_KEY: ${{ secrets.GOOGLE_SSH_KEY }}
-        run: |
-          pytest tests/integration/test_google_real.py -m "integration and google" -v --tb=short
-
-  integration-tests-azure:
-    name: Integration — Azure
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && (inputs.run_integration || inputs.run_azure_tests)
-    needs: unit-tests
-    environment: integration
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test,azure]"
-
-      - name: Run Azure integration tests
-        env:
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_SSH_KEY: ${{ secrets.AZURE_SSH_KEY }}
-        run: |
-          pytest tests/integration/test_azure_real.py -m "integration and azure" -v --tb=short
+    # -----------------------------------------------------------------------

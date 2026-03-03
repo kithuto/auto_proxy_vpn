@@ -9,7 +9,7 @@ from os.path import isfile
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, DigitalOceanConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
-from .digitalocean_utils import get_or_create_project, get_or_create_ssh_keys, get_servers_and_size, start_proxy, get_next_proxy_name
+from .digitalocean_utils import get_or_create_project, get_or_create_ssh_keys, get_servers_and_size, start_proxy, get_next_droplet_name
 from .digitalocean_exceptions import DropletNotProxyException
 from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
 from auto_proxy_vpn.utils.util import get_public_ip
@@ -335,7 +335,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         '''
         
         retry = retry if not region else False
-        proxy_name = get_next_proxy_name(self._headers, proxy_name)
+        proxy_name = get_next_droplet_name(self._headers, proxy_name)
         
         if not port:
             port = randint(10000, 65000)

@@ -7,7 +7,6 @@ from unittest.mock import patch
 from auto_proxy_vpn import CloudProvider
 from auto_proxy_vpn.configs import (
     AzureConfig,
-    BaseConfig,
     DigitalOceanConfig,
     GoogleConfig,
     ManagerRuntimeConfig,

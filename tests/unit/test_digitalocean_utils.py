@@ -2,9 +2,8 @@
 
 import pytest
 import responses
-
-from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
-from tests.conftest import make_do_regions_response
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 DO_API = "https://api.digitalocean.com/v2"
 HEADERS = {"Content-Type": "application/json", "Authorization": "Bearer tok"}
@@ -129,8 +128,8 @@ class TestGetNextProxyName:
             json={"droplets": []},
             status=200,
         )
-        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_proxy_name
-        name = get_next_proxy_name(HEADERS)
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_droplet_name
+        name = get_next_droplet_name(HEADERS)
         assert name == "proxy1"
 
     @responses.activate
@@ -141,8 +140,8 @@ class TestGetNextProxyName:
             json={"droplets": [{"name": "proxy1"}, {"name": "proxy2"}]},
             status=200,
         )
-        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_proxy_name
-        name = get_next_proxy_name(HEADERS)
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_droplet_name
+        name = get_next_droplet_name(HEADERS)
         assert name == "proxy3"
 
     @responses.activate
@@ -153,8 +152,8 @@ class TestGetNextProxyName:
             json={"droplets": []},
             status=200,
         )
-        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_proxy_name
-        name = get_next_proxy_name(HEADERS, "custom-proxy")
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_droplet_name
+        name = get_next_droplet_name(HEADERS, "custom-proxy")
         assert name == "custom-proxy"
 
     @responses.activate
@@ -165,6 +164,122 @@ class TestGetNextProxyName:
             json={"droplets": [{"name": "taken"}]},
             status=200,
         )
-        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_proxy_name
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_droplet_name
         with pytest.raises(NameError, match="already exists"):
-            get_next_proxy_name(HEADERS, "taken")
+            get_next_droplet_name(HEADERS, "taken")
+
+
+class TestGetNextVpnName:
+    @responses.activate
+    def test_first_vpn_name(self):
+        responses.add(
+            responses.GET,
+            f"{DO_API}/droplets",
+            json={"droplets": []},
+            status=200,
+        )
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_droplet_name
+        assert get_next_droplet_name(HEADERS, is_vpn=True) == "vpn1"
+
+    @responses.activate
+    def test_increments_vpn_name(self):
+        responses.add(
+            responses.GET,
+            f"{DO_API}/droplets",
+            json={"droplets": [{"name": "vpn1"}, {"name": "vpn2"}]},
+            status=200,
+        )
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import get_next_droplet_name
+        assert get_next_droplet_name(HEADERS, is_vpn=True) == "vpn3"
+
+
+class TestStartProxy:
+    def test_non_202_non_422_returns_error(self, monkeypatch):
+        from auto_proxy_vpn.providers.digitalocean import digitalocean_utils as utils
+
+        monkeypatch.setattr(utils, "post", lambda *args, **kwargs: SimpleNamespace(status_code=500))
+
+        droplet_id, ip, error = utils.start_proxy(
+            name="proxy1",
+            image="img",
+            region="nyc1",
+            size="s-1vcpu-512mb-10gb",
+            port=3128,
+            ssh_keys=[1],
+            headers=HEADERS,
+            regions=["nyc1"],
+            logger=None,
+            is_async=True,
+        )
+
+        assert (droplet_id, ip, error) == (0, "", True)
+
+    def test_422_without_retry_raises_country_not_available(self, monkeypatch):
+        from auto_proxy_vpn.providers.digitalocean import digitalocean_utils as utils
+        from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
+
+        monkeypatch.setattr(utils, "post", lambda *args, **kwargs: SimpleNamespace(status_code=422))
+
+        with pytest.raises(CountryNotAvailableException):
+            utils.start_proxy(
+                name="proxy1",
+                image="img",
+                region="nyc1",
+                size="s-1vcpu-512mb-10gb",
+                port=3128,
+                ssh_keys=[1],
+                headers=HEADERS,
+                regions=["nyc1", "sfo1"],
+                logger=MagicMock(),
+                retry=False,
+                is_async=True,
+            )
+
+    def test_successful_start_returns_ip(self, monkeypatch):
+        from auto_proxy_vpn.providers.digitalocean import digitalocean_utils as utils
+
+        monkeypatch.setattr(
+            utils,
+            "post",
+            lambda *args, **kwargs: SimpleNamespace(
+                status_code=202,
+                json=lambda: {
+                    "droplet": {
+                        "id": 123,
+                        "status": "new",
+                        "networks": {"v4": []},
+                    }
+                },
+            ),
+        )
+        monkeypatch.setattr(utils, "sleep", lambda *_: None)
+        monkeypatch.setattr(
+            utils,
+            "get",
+            lambda *args, **kwargs: SimpleNamespace(
+                json=lambda: {
+                    "droplet": {
+                        "id": 123,
+                        "status": "active",
+                        "networks": {"v4": [{"type": "public", "ip_address": "1.2.3.4"}]},
+                    }
+                }
+            ),
+        )
+
+        droplet_id, ip, error = utils.start_proxy(
+            name="proxy1",
+            image="img",
+            region="nyc1",
+            size="s-1vcpu-512mb-10gb",
+            port=3128,
+            ssh_keys=[1],
+            headers=HEADERS,
+            regions=["nyc1", "nyc2"],
+            logger=None,
+            is_async=False,
+        )
+
+        assert droplet_id == 123
+        assert ip == "1.2.3.4"
+        assert error is False

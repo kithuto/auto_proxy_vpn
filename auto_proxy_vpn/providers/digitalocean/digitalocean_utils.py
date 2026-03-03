@@ -102,40 +102,25 @@ def get_servers_and_size(server_size: str, active_servers: list[dict], servers: 
             return 's-2vcpu-4gb', servers
         return 's-1vcpu-2gb', servers
 
-def get_next_proxy_name(headers: dict[str, str], name: str = '') -> str:
+def get_next_droplet_name(headers: dict[str, str], name: str = '', is_vpn: bool = False) -> str:
     '''
-    Get next avaliable proxy name.
+    Get next avaliable proxy or vpn name.
     '''
     try:
-        droplets = get('https://api.digitalocean.com/v2/droplets?tag_name=proxy', headers=headers).json()['droplets']
+        droplets = get(f'https://api.digitalocean.com/v2/droplets?tag_name={"proxy" if not is_vpn else "vpn"}', headers=headers).json()['droplets']
     except:
         raise ConnectionError('Error connecting to DigitalOcean.')
     
     if name:
         if [x['name'] for x in droplets if x['name'] == name]:
-            raise NameError(f"Proxy {name} already exists!")
+            raise NameError(f"{'VPN' if is_vpn else 'Proxy'} {name} already exists!")
         return name
     
-    names = sorted([x['name'] for x in droplets if search(r'^proxy\d+$', x['name'])])
+    names = sorted([x['name'] for x in droplets if search(rf'^{ "vpn" if is_vpn else "proxy" }\d+$', x['name'])])
     if names:
         last_name = names[-1]
-        return 'proxy'+str(int(last_name[5:])+1)
-    return 'proxy1'
-
-def get_next_vpn_name(headers: dict[str, str]) -> str:
-    '''
-    Get next avaliable VPN name.
-    '''
-    try:
-        droplets = get('https://api.digitalocean.com/v2/droplets', headers=headers).json()['droplets']
-    except:
-        raise ConnectionError('Error connecting to DigitalOcean.')
-    
-    names = sorted([x['name'] for x in droplets if search(r'^vpn\d+$', x['name'])])
-    if names:
-        last_name = names[-1]
-        return 'vpn'+str(int(last_name[3:])+1)
-    return 'vpn1'
+        return f'{"vpn" if is_vpn else "proxy"}{str(int(last_name[3 if is_vpn else 5:])+1)}'
+    return f'{"vpn" if is_vpn else "proxy"}1'
 
 def start_proxy(name: str,
                 image: str,
@@ -264,131 +249,6 @@ def start_proxy(name: str,
             ip = ''
             error = True
     except:
-        ip = ''
-        error = True
-    
-    return new_droplet['id'], ip, error
-
-def start_vpn(name: str,
-              image: str,
-              region: str,
-              size: str,
-              port: int,
-              ssh_keys: list[int],
-              num_users: int,
-              ftp_password: str,
-              allowed_ips: str,
-              headers: dict[str, str],
-              regions: list[str],
-              output: bool,
-              is_async: bool = False,
-              retry: bool = True,
-              times: int = 0) -> Tuple[int, str, bool]:
-    
-    image_commands = f"""#!/bin/bash
-
-rm -R /etc/ssh/sshd_config.d/*
-
-echo -e '{ftp_password}\n{ftp_password}' | passwd root
-
-systemctl restart sshd.service
-
-cd ~
-mkdir wireward
-cd wireward
-
-echo "services:
-  wireguard:
-    image: lscr.io/linuxserver/wireguard:latest
-    container_name: wireguard
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/Madrid
-      - SERVERURL=auto
-      - PEERS={str(num_users)}
-      - PEERDNS=auto
-      - INTERNAL_SUBNET=10.13.13.0
-      - ALLOWEDIPS={allowed_ips}
-      - LOG_CONFS=false
-    volumes:
-      - ./config:/config
-      - /lib/modules:/lib/modules
-    ports:
-      - {str(port)}:51820/udp
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-    restart: always" > docker-compose.yml
-
-docker compose up -d"""
-
-    data = {
-        "name": name,
-        "region": region,
-        "size": size,
-        "image": image,
-        "ssh_keys": ssh_keys,
-        "tags": ["vpn"],
-        "user_data": image_commands,
-        "with_droplet_agent": False
-    }
-    
-    new_droplet = post('https://api.digitalocean.com/v2/droplets', headers=headers, json=data)
-    
-    if new_droplet.status_code != 202:
-        if new_droplet.status_code == 422:
-            if output:
-                print('The region '+region+" isn't avaliable.")
-            if retry:
-                if times == 5:
-                    if output:
-                        print('Something going wrong in digitalocean...')
-                    return 0, '', True
-                regions.remove(region)
-                local_regions = [x for x in regions if x[:-1] == region[:-1]]
-                if local_regions:
-                    region = choice(local_regions) # type: ignore
-                else:
-                    if output:
-                        print('No servers in '+region[:-1]+' are avaliable.')
-                    region = choice(regions)
-                if output:
-                    print("Starting a new vpn in the region "+region+"...")
-                return start_vpn(name, image, region, size, port, ssh_keys, num_users, ftp_password, allowed_ips, headers, regions, output, is_async, times=times+1)
-        if output:
-            print('Something going wrong in digitalocean...')
-        return 0, '', True
-    else:
-        new_droplet = new_droplet.json()['droplet']
-    
-    times = 0
-    error = False
-    if not is_async:
-        while new_droplet['status'] != 'active' and times < 3:
-            sleep(5)
-            try:
-                new_droplet = get('https://api.digitalocean.com/v2/droplets/'+str(new_droplet['id']), headers=headers).json()['droplet']
-            except:
-                if output:
-                    print('Error checking the status of the droplet... Trying again...')
-                times += 1
-                sleep(5)
-        if new_droplet['status'] == 'active':
-            error = True
-        
-    
-    try:
-        ip = [x for x in new_droplet['networks']['v4'] if x['type'] == 'public']
-    except:
-        ip = ''
-        error = True
-        
-    if ip:
-        ip = ip[0]['ip_address']
-    else:
         ip = ''
         error = True
     

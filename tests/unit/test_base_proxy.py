@@ -1,11 +1,11 @@
 """Tests for BaseProxy, ProxyBatch, and BaseProxyManager base behaviour."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager, ProxyBatch
+from auto_proxy_vpn.utils.base_proxy import ProxyBatch
 from auto_proxy_vpn.utils.exceptions import ProxyIpNotAvailableException
-from tests.conftest import StubProxy, StubProxyManager
+from tests.conftest import StubProxy
 
 
 # ============================================================================
@@ -62,6 +62,39 @@ class TestBaseProxyIsActive:
         with pytest.raises(ProxyIpNotAvailableException):
             inactive_proxy.is_active()
 
+    @patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="1.2.3.4")
+    def test_is_active_async_branch_sets_active(self, mock_ip, stub_proxy):
+        stub_proxy.active = False
+        stub_proxy.is_async = True
+        result = stub_proxy.is_active(wait=False)
+        assert result is True
+
+    def test_is_active_returns_false_on_proxy_auth_error(self, stub_proxy):
+        stub_proxy.active = False
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip",
+            side_effect=OSError("Tunnel connection failed: 407 Proxy Authentication Required"),
+        ):
+            assert stub_proxy.is_active(wait=True) is False
+
+    def test_is_active_retries_after_oserror_then_succeeds(self, stub_proxy):
+        stub_proxy.active = False
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip",
+            side_effect=[OSError("temporary error"), "1.2.3.4"],
+        ):
+            with patch("auto_proxy_vpn.utils.base_proxy.sleep", return_value=None):
+                assert stub_proxy.is_active(wait=True) is True
+
+    def test_is_active_retries_after_generic_exception_then_succeeds(self, stub_proxy):
+        stub_proxy.active = False
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip",
+            side_effect=[Exception("temporary error"), "1.2.3.4"],
+        ):
+            with patch("auto_proxy_vpn.utils.base_proxy.sleep", return_value=None):
+                assert stub_proxy.is_active(wait=True) is True
+
 
 class TestBaseProxyContextManager:
     """Context manager (with statement) behaviour."""
@@ -79,6 +112,11 @@ class TestBaseProxyContextManager:
     def test_close_calls_stop(self, stub_proxy):
         stub_proxy.close()
         assert stub_proxy.stopped is True
+
+    def test_enter_raises_timeout_when_not_active(self, stub_proxy):
+        with patch.object(stub_proxy, "is_active", return_value=False):
+            with pytest.raises(TimeoutError, match="couldn't be activated"):
+                stub_proxy.__enter__()
 
 
 # ============================================================================
@@ -184,9 +222,17 @@ class TestBaseProxyManagerGetProxies:
         with pytest.raises(ValueError, match="region"):
             stub_manager.get_proxies(1, regions="nonexistent")
 
+    def test_invalid_region_in_list_raises(self, stub_manager):
+        with pytest.raises(ValueError, match="region"):
+            stub_manager.get_proxies(2, regions=["region-a", "nonexistent"])
+
     def test_invalid_auth_type_raises(self, stub_manager):
         with pytest.raises(TypeError, match="auth"):
             stub_manager.get_proxies(1, auths="not-a-dict")
+
+    def test_invalid_auth_type_in_list_raises(self, stub_manager):
+        with pytest.raises(TypeError, match="auth"):
+            stub_manager.get_proxies(2, auths=[{"user": "u", "password": "p"}, "bad-auth"])
 
     def test_auth_missing_keys_raises(self, stub_manager):
         with pytest.raises(KeyError, match="two keys"):

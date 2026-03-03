@@ -6,6 +6,7 @@ from random import randint, shuffle, choice
 from re import finditer, search
 from itertools import chain
 from time import sleep
+from ipaddress import ip_network, ip_address
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, GoogleConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
@@ -122,6 +123,7 @@ class GoogleProxy(BaseProxy):
             if self.is_async and not wait:
                 try:
                     self.ip = self.manager._instances_client.get(instance_request).network_interfaces[0].access_configs[0].nat_i_p
+                    print(self.ip)
                 except:
                     if not self.retried:
                         if self.logger:
@@ -480,7 +482,7 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             else:
                 ips = allowed_ips
             
-            if not all(search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?', ip) for ip in allowed_ips):
+            if not all(search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?', i) for i in ips):
                 raise TypeError("IPs or ranges of ips with bad format!")
         
         if ip not in ips:

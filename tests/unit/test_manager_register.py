@@ -1,7 +1,6 @@
 """Tests for the ProxyManagers registry (manager_register.py)."""
 
 import pytest
-from unittest.mock import MagicMock
 
 from auto_proxy_vpn import CloudProvider
 from auto_proxy_vpn.manager_register import ProxyManagers
