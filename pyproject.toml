@@ -9,7 +9,7 @@ description = "A package to create on demand proxies and vpns in different cloud
 keywords = ["vpn", "proxy", "networking", "cloud", "security", "web scrapping"]
 readme = "README.md"
 license = {file = "LICENSE"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = ["requests"]
 classifiers = [
     "Programming Language :: Python :: 3",

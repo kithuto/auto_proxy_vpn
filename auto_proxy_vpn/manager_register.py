@@ -66,6 +66,6 @@ def import_provider_modules():
     package_name = 'auto_proxy_vpn.providers'
     current_dir = Path(__file__).resolve().parent
     allowed_packages = {x.value for x in CloudProvider}
-    provider_packages = [x for x in iter_modules([current_dir / "providers"], prefix=f"{package_name}.") if x.name.split(".")[-1] in allowed_packages]
+    provider_packages = [x for x in iter_modules([f"{current_dir}/providers"], prefix=f"{package_name}.") if x.name.split(".")[-1] in allowed_packages]
     for package in provider_packages:
         import_module(package.name)
