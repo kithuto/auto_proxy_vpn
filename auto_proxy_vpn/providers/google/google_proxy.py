@@ -6,13 +6,12 @@ from random import randint, shuffle, choice
 from re import finditer, search
 from itertools import chain
 from time import sleep
-from ipaddress import ip_network, ip_address
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, GoogleConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
 from .google_exceptions import GoogleAuthException
 from .google_utils import start_proxy, wait_for_extended_operation, get_avaliable_regions_by_size
-from auto_proxy_vpn.utils.util import get_public_ip
+from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key
 
 class GoogleProxy(BaseProxy):
     def __init__(self,
@@ -276,7 +275,7 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             If credentials are required but neither
             ``GOOGLE_APPLICATION_CREDENTIALS`` nor ``credentials`` is provided.
         TypeError
-            If ``ssh_key`` has an invalid structure.
+            If ``ssh_key`` has an invalid structure or no valid SSH keys are found.
         ImportError
             If ``google-cloud-compute`` is not installed.
 
@@ -318,9 +317,11 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
                 ssh_key = [x.strip('\n') for x in f.readlines() if x.strip('\n')]
         try:
             ssh_key = [ssh_key] if isinstance(ssh_key, str) or isinstance(ssh_key, dict) else ssh_key
-            self.ssh_keys: list[str] = [x if not isinstance(x, dict) else x['public_key'] for x in ssh_key] 
+            self.ssh_keys: list[str] = [x if not isinstance(x, dict) else x['public_key'] for x in ssh_key if isinstance(x, dict) or (isinstance(x, str) and is_ssh_key(x))] 
         except:
             raise TypeError("Bad ssh_key. SSH in a dict must follow format: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}")
+        if not self.ssh_keys:
+            raise TypeError("No valid ssh keys found in the provided ssh_key parameter!")
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
         self.logger = logger

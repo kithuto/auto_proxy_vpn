@@ -137,6 +137,32 @@ class TestProxyManagerAzureInit:
                 with pytest.raises(ValueError, match="credentials not provided"):
                     ProxyManagerAzure(ssh_key="key")
 
+    def test_no_valid_ssh_keys_found_raises(self):
+        sdk = _make_mock_azure_sdk()
+        with patch.dict("sys.modules", {
+            "azure": MagicMock(),
+            "azure.identity": MagicMock(DefaultAzureCredential=sdk["DefaultAzureCredential"]),
+            "azure.mgmt": MagicMock(),
+            "azure.mgmt.subscription": MagicMock(SubscriptionClient=sdk["SubscriptionClient"]),
+            "azure.mgmt.resource": MagicMock(ResourceManagementClient=sdk["ResourceManagementClient"]),
+            "azure.mgmt.network": MagicMock(
+                NetworkManagementClient=sdk["NetworkManagementClient"],
+                models=sdk["network_models"],
+            ),
+            "azure.mgmt.compute": MagicMock(
+                ComputeManagementClient=sdk["ComputeManagementClient"],
+                models=sdk["compute_models"],
+            ),
+        }):
+            with patch.dict("os.environ", {"AZURE_SUBSCRIPTION_ID": "fake-sub-id"}):
+                from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+                with pytest.raises(TypeError, match="No valid ssh keys found"):
+                    ProxyManagerAzure(
+                        ssh_key=["invalid-key", "also-invalid"],
+                        credentials="fake-sub-id",
+                        log=False,
+                    )
+
     def test_from_config_with_none_raises(self):
         from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
         with pytest.raises(ValueError):

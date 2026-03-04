@@ -26,3 +26,9 @@ def get_public_ip(timeout=2, proxy: Optional[dict[str, str]] = None):
             continue
 
     raise RuntimeError("Can't find the public IP address!")
+
+def is_ssh_key(key: str) -> bool:
+    """
+    Check if the provided string is a valid SSH public key.
+    """
+    return key.startswith(("ssh-", "ecdsa-", "sk-ssh-", "sk-ecdsa-")) and len(key.split()) >= 2

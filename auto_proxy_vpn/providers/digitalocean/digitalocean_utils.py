@@ -69,7 +69,7 @@ def get_or_create_ssh_keys(ssh_keys: list[dict[str, str] | str] | dict[str, str]
         elif isinstance(item, str):
             keys_found = [x for x in all_ssh_keys if x['name'] == item]
             if not keys_found:
-                raise NameError('ssh key '+ str(item) + " doesn't exists in DigitalOcean")
+                raise NameError('ssh key '+ str(item) + " doesn't exists in DigitalOcean. To create a new ssh key you can use the following format in the ssh_keys parameter: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}")
             key = keys_found[0]['id']
         else:
             raise TypeError('Bad ssh_key')

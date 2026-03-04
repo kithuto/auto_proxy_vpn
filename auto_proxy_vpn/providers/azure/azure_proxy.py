@@ -8,7 +8,7 @@ from time import sleep
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, AzureConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
-from auto_proxy_vpn.utils.util import get_public_ip
+from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key
 from auto_proxy_vpn.utils.ssh_client import SSHClient
 from .azure_utils import start_proxy
 
@@ -222,7 +222,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             If subscription information is missing both in ``credentials``
             and in ``AZURE_SUBSCRIPTION_ID`` environment variable.
         TypeError
-            If ``ssh_key`` has an invalid structure.
+            If ``ssh_key`` has an invalid structure or no valid SSH keys are found.
         ImportError
             If required Azure SDK packages are not installed.
 
@@ -263,9 +263,11 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
                 ssh_key = [x.strip('\n') for x in f.readlines() if x.strip('\n')]
         try:
             ssh_key = [ssh_key] if isinstance(ssh_key, str) or isinstance(ssh_key, dict) else ssh_key
-            self.ssh_keys: list[str] = [x if not isinstance(x, dict) else x['public_key'] for x in ssh_key] 
+            self.ssh_keys: list[str] = [x if not isinstance(x, dict) else x['public_key'] for x in ssh_key if isinstance(x, dict) or (isinstance(x, str) and is_ssh_key(x))] 
         except:
             raise TypeError("Bad ssh_key. SSH in a dict must follow format: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}")
+        if not self.ssh_keys:
+            raise TypeError("No valid ssh keys found in the provided ssh_key parameter!")
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
         self.logger = logger

@@ -303,6 +303,137 @@ class TestDigitalOceanProxy:
         assert proxy._digitalocean_active is True
         assert proxy.ip == "9.9.9.9"
 
+    def test_init_logs_create_and_reload_paths(self):
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import DigitalOceanProxy
+
+        logger = MagicMock()
+        with patch.object(DigitalOceanProxy, "is_active", return_value=True):
+            DigitalOceanProxy(
+                id=1,
+                name="proxy-log",
+                ip="1.1.1.1",
+                port=80,
+                region="nyc1",
+                token="tok",
+                active=True,
+                is_async=False,
+                logger=logger,
+                reload=False,
+                on_exit="destroy",
+            )
+
+        with patch.object(DigitalOceanProxy, "is_active", return_value=True):
+            DigitalOceanProxy(
+                id=2,
+                name="proxy-reload",
+                ip="1.1.1.2",
+                port=80,
+                region="nyc1",
+                token="tok",
+                active=True,
+                is_async=True,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        assert logger.info.called
+
+    def test_is_active_async_get_error_returns_inactive(self):
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import DigitalOceanProxy
+
+        with patch.object(DigitalOceanProxy, "is_active", return_value=False):
+            proxy = DigitalOceanProxy(
+                id=99,
+                name="proxy-err",
+                ip="",
+                port=8080,
+                region="nyc1",
+                token="tok",
+                active=False,
+                is_async=True,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        proxy._digitalocean_active = False
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get", side_effect=Exception("down")):
+            assert proxy.is_active(wait=False) is False
+
+    def test_is_active_sync_get_errors_return_inactive(self):
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import DigitalOceanProxy
+
+        with patch.object(DigitalOceanProxy, "is_active", return_value=False):
+            proxy = DigitalOceanProxy(
+                id=100,
+                name="proxy-sync-err",
+                ip="",
+                port=8080,
+                region="nyc1",
+                token="tok",
+                active=False,
+                is_async=False,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        proxy._digitalocean_active = False
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get", side_effect=Exception("down")):
+            with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.sleep", return_value=None):
+                assert proxy.is_active(wait=False) is False
+
+    def test_is_active_sync_success_sets_public_ip(self):
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import DigitalOceanProxy
+
+        droplet = make_do_droplet(101, "proxy-sync", ip="9.9.9.8", status="active")
+        with patch.object(DigitalOceanProxy, "is_active", return_value=False):
+            proxy = DigitalOceanProxy(
+                id=101,
+                name="proxy-sync",
+                ip="",
+                port=8080,
+                region="nyc1",
+                token="tok",
+                active=False,
+                is_async=False,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        proxy._digitalocean_active = False
+        with patch(
+            "auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get",
+            return_value=MagicMock(json=lambda: {"droplet": droplet}),
+        ):
+            with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="9.9.9.8"):
+                assert proxy.is_active(wait=False) is True
+
+        assert proxy.ip == "9.9.9.8"
+
+    def test_stop_proxy_logs_already_when_delete_fails(self):
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import DigitalOceanProxy
+
+        logger = MagicMock()
+        with patch.object(DigitalOceanProxy, "is_active", return_value=True):
+            proxy = DigitalOceanProxy(
+                id=101,
+                name="proxy-del-fail",
+                ip="1.1.1.1",
+                port=8080,
+                region="nyc1",
+                token="tok",
+                active=True,
+                is_async=True,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.delete", return_value=MagicMock(status_code=404)):
+            proxy._stop_proxy()
+
+        assert logger.info.called
+
 
 # ============================================================================
 # ProxyManagerDigitalOcean — get_running_proxy_names
@@ -329,6 +460,18 @@ class TestDigitalOceanRunningNames:
         names = mgr.get_running_proxy_names()
         assert "proxy1" in names
         assert "proxy2" in names
+
+    @responses.activate
+    def test_get_running_proxy_names_connection_error(self, digitalocean_config):
+        _register_common_do_mocks()
+        runtime = ManagerRuntimeConfig(log=False)
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+
+        mgr = ProxyManagerDigitalOcean.from_config(digitalocean_config, runtime)
+
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get", side_effect=Exception("down")):
+            with pytest.raises(ConnectionError, match="Error connecting to DigitalOcean"):
+                mgr.get_running_proxy_names()
 
 
 class TestProxyManagerDigitalOceanGetProxyByName:
@@ -431,3 +574,108 @@ class TestProxyManagerDigitalOceanGetProxyByName:
             mock_ssh.return_value.run_command.return_value = (0, "acl custom_ips src 1.1.1.1\n", "")
             with pytest.raises(DropletNotProxyException):
                 mgr.get_proxy_by_name("proxy-c")
+
+    @responses.activate
+    def test_get_proxy_by_name_search_error_raises_connection_error(self, digitalocean_config):
+        _register_common_do_mocks()
+        runtime = ManagerRuntimeConfig(log=False)
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+
+        mgr = ProxyManagerDigitalOcean.from_config(digitalocean_config, runtime)
+
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get", side_effect=Exception("down")):
+            with pytest.raises(ConnectionError, match="Error searching for the droplet"):
+                mgr.get_proxy_by_name("proxy-x")
+
+    @responses.activate
+    def test_get_proxy_by_name_logs_when_logger_exists(self, digitalocean_config):
+        _register_common_do_mocks()
+        droplet = make_do_droplet(12, "proxy-d", ip="8.8.4.7", status="active")
+
+        responses.add(
+            responses.GET,
+            f"{DO_API}/droplets",
+            match=[matchers.query_param_matcher({"name": "proxy-d", "type": "droplets"})],
+            json={"droplets": [droplet]},
+            status=200,
+        )
+
+        runtime = ManagerRuntimeConfig(log=False)
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+        mgr = ProxyManagerDigitalOcean.from_config(digitalocean_config, runtime)
+        mgr.logger = MagicMock()
+
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.SSHClient") as mock_ssh:
+            mock_ssh.return_value.run_command.return_value = (0, "http_port 3128\n", "")
+            with patch(
+                "auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.DigitalOceanProxy.is_active",
+                return_value=True,
+            ):
+                mgr.get_proxy_by_name("proxy-d", is_async=True)
+
+        assert mgr.logger.info.called
+
+
+class TestProxyManagerDigitalOceanInitExtra:
+    def test_regions_request_exception_raises_connection_error(self):
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get", side_effect=Exception("down")):
+            with pytest.raises(ConnectionError, match="Error connecting to DigitalOcean"):
+                ProxyManagerDigitalOcean(ssh_key="test-key", token="tok", log=False)
+
+    def test_regions_http_error_raises_connection_error(self):
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get", return_value=mock_resp):
+            with pytest.raises(ConnectionError, match="Error connecting to DigitalOcean"):
+                ProxyManagerDigitalOcean(ssh_key="test-key", token="tok", log=False)
+
+    @responses.activate
+    def test_reads_ssh_keys_from_file_path(self, tmp_path):
+        key_file = tmp_path / "keys.txt"
+        key_file.write_text("test-key-1\ntest-key-2\n", encoding="utf-8")
+
+        responses.add(
+            responses.GET,
+            f"{DO_API}/regions",
+            json=make_do_regions_response(),
+            status=200,
+        )
+
+        with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get_or_create_project", return_value="proj-1"):
+            with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get_or_create_ssh_keys", return_value=[1, 2]) as mock_keys:
+                from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+                mgr = ProxyManagerDigitalOcean(ssh_key=str(key_file), token="tok", log=False)
+
+        assert mgr.ssh_keys == [1, 2]
+        assert mock_keys.call_args.args[0] == ["test-key-1", "test-key-2"]
+
+
+class TestProxyManagerDigitalOceanGetProxyExtra:
+    @responses.activate
+    def test_get_proxy_allowed_ips_string_and_logger_path(self, digitalocean_config):
+        _register_common_do_mocks()
+        responses.add(responses.GET, f"{DO_API}/droplets", json={"droplets": []}, status=200)
+
+        runtime = ManagerRuntimeConfig(log=False)
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+        mgr = ProxyManagerDigitalOcean.from_config(digitalocean_config, runtime)
+        mgr.logger = MagicMock()
+
+        with patch(
+            "auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.start_proxy",
+            return_value=(123, "10.0.0.9", False),
+        ) as mock_start:
+            with patch(
+                "auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.DigitalOceanProxy.is_active",
+                return_value=True,
+            ):
+                proxy = mgr.get_proxy(allowed_ips="8.8.8.8", is_async=True)
+
+        passed_allowed_ips = mock_start.call_args.args[9]
+        assert passed_allowed_ips == ["8.8.8.8"]
+        assert proxy.ip == "10.0.0.9"
+        assert mgr.logger.info.called

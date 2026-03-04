@@ -259,6 +259,20 @@ class TestProxyManagerGoogleInit:
                     log=False,
                 )
 
+    def test_no_valid_ssh_keys_found_raises(self):
+        compute_v1, google_exceptions, service_account, _ = _make_mock_google_sdk()
+        modules = _make_sys_modules_patch(compute_v1, google_exceptions, service_account)
+
+        with patch.dict("sys.modules", modules):
+            from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
+            with pytest.raises(TypeError, match="No valid ssh keys found"):
+                ProxyManagerGoogle(
+                    ssh_key=["invalid-key", "still-invalid"],
+                    project="test-project",
+                    credentials="/tmp/fake.json",
+                    log=False,
+                )
+
     def test_import_error_when_google_sdk_missing(self):
         real_import = builtins.__import__
 
@@ -501,6 +515,32 @@ class TestProxyManagerGoogleGetProxy:
         assert mgr.logger.warning.called
         assert mgr.logger.error.called
 
+    def test_get_proxy_auto_name_while_increment_branch(self):
+        mgr, clients = _build_google_manager()
+
+        inst1 = MagicMock(); inst1.name = "proxy1"
+        inst3 = MagicMock(); inst3.name = "proxy3"
+        instances = [inst1, inst3]
+
+        class _AggEntry:
+            def __init__(self, instances):
+                self.instances = instances
+
+            def __contains__(self, key):
+                return key == "instances" and bool(self.instances)
+
+        clients["instances_client"].aggregated_list.return_value = [
+            ("zones/us-central1-a", _AggEntry(instances))
+        ]
+
+        with patch("auto_proxy_vpn.providers.google.google_proxy.get_public_ip", return_value="1.2.3.4"):
+            with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.10", False)) as mock_start:
+                with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active", return_value=True):
+                    proxy = mgr.get_proxy(size="small", is_async=True)
+
+        assert proxy.name == "proxy4"
+        assert mock_start.call_args.args[1] == "proxy4"
+
 
 # ============================================================================
 # GoogleProxy
@@ -675,6 +715,337 @@ class TestGoogleProxy:
             )
         proxy_keep._stop_proxy(wait=False)
         assert proxy_keep.stopped is True
+
+    def test_is_active_async_retry_success_restores_async_and_logs(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        clients["instances_client"].get.side_effect = Exception("down")
+
+        with patch.object(GoogleProxy, "is_active", return_value=False):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-async-retry-ok",
+                ip="",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=True,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        proxy.retried = False
+        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.77", False)):
+            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+                with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.0.0.77"):
+                    assert proxy.is_active(wait=False) is True
+
+        mock_stop.assert_called_once_with(reset=False)
+        assert proxy.is_async is True
+        assert logger.info.called
+
+    def test_is_active_async_retry_error_logs_and_returns_inactive(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        clients["instances_client"].get.side_effect = Exception("down")
+
+        with patch.object(GoogleProxy, "is_active", return_value=False):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-async-retry-error",
+                ip="",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=True,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("", True)):
+            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+                assert proxy.is_active(wait=False) is False
+
+        assert mock_stop.call_count >= 2
+        assert logger.error.called
+
+    def test_is_active_async_when_already_retried_warns_and_stops(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        clients["instances_client"].get.side_effect = Exception("down")
+
+        with patch.object(GoogleProxy, "is_active", return_value=False):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-async-retried",
+                ip="",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=True,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        proxy.retried = True
+        with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+            assert proxy.is_active(wait=False) is False
+
+        mock_stop.assert_called_once()
+        assert logger.warning.called
+
+    def test_is_active_async_empty_ip_returns_inactive(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        empty_inst = SimpleNamespace(
+            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="")])]
+        )
+        clients["instances_client"].get.return_value = empty_inst
+
+        with patch.object(GoogleProxy, "is_active", return_value=False):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-async-empty-ip",
+                ip="",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=True,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        assert proxy.is_active(wait=False) is False
+
+    def test_is_active_sync_empty_ip_loops_and_returns_inactive(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        empty_inst = SimpleNamespace(
+            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="")])]
+        )
+        clients["instances_client"].get.return_value = empty_inst
+
+        with patch.object(GoogleProxy, "is_active", return_value=False):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-sync-empty-ip",
+                ip="",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=False,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        with patch("auto_proxy_vpn.providers.google.google_proxy.sleep", return_value=None):
+            assert proxy.is_active(wait=False) is False
+
+    def test_is_active_sync_retry_then_success(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        clients["instances_client"].get.side_effect = Exception("down")
+
+        with patch.object(GoogleProxy, "is_active", return_value=False):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-sync-retry-ok",
+                ip="",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=False,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.88", False)):
+            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+                with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.0.0.88"):
+                    assert proxy.is_active(wait=False) is True
+
+        mock_stop.assert_called_once_with(reset=False)
+        assert logger.info.called
+
+    def test_is_active_sync_retry_error_logs_and_stops(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        clients["instances_client"].get.side_effect = Exception("down")
+
+        with patch.object(GoogleProxy, "is_active", return_value=False):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-sync-retry-error",
+                ip="",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=False,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("", True)):
+            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+                assert proxy.is_active(wait=False) is False
+
+        assert mock_stop.call_count >= 2
+        assert logger.error.called
+
+    def test_is_active_sync_already_retried_warns_and_returns(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        clients["instances_client"].get.side_effect = Exception("down")
+
+        with patch.object(GoogleProxy, "is_active", return_value=False):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-sync-retried",
+                ip="",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=False,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        proxy.retried = True
+        with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+            assert proxy.is_active(wait=False) is False
+
+        mock_stop.assert_called_once()
+        assert logger.warning.called
+
+    def test_stop_proxy_sync_wait_calls_wait_operation_and_logs(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        op = SimpleNamespace(result=lambda timeout=0: None, error_code=None, warnings=[])
+        clients["firewall_client"].delete.return_value = op
+        clients["instances_client"].delete.return_value = op
+
+        with patch.object(GoogleProxy, "is_active", return_value=True):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-stop-sync",
+                ip="35.0.0.20",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=False,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        with patch("auto_proxy_vpn.providers.google.google_proxy.wait_for_extended_operation", return_value=None) as wait_mock:
+            proxy._stop_proxy(wait=True)
+
+        assert wait_mock.call_count == 2
+        assert logger.info.called
+
+    def test_stop_proxy_instance_delete_exception_is_ignored(self):
+        mgr, clients = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        clients["firewall_client"].delete.return_value = SimpleNamespace()
+        clients["instances_client"].delete.side_effect = Exception("delete failed")
+
+        with patch.object(GoogleProxy, "is_active", return_value=True):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-stop-ignore",
+                ip="35.0.0.21",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=True,
+                logger=logger,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        proxy._stop_proxy(wait=False)
+        assert proxy.stopped is True
+
+    def test_stop_proxy_keep_logs_and_reset_false_returns(self):
+        mgr, _ = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        logger = MagicMock()
+        with patch.object(GoogleProxy, "is_active", return_value=True):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-keep-log",
+                ip="35.0.0.30",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=True,
+                logger=logger,
+                reload=True,
+                on_exit="keep",
+            )
+
+        proxy._stop_proxy(wait=False, reset=False)
+        assert proxy.stopped is False
+        assert logger.info.called
+
+    def test_stop_proxy_when_already_stopped_returns_immediately(self):
+        mgr, _ = _build_google_manager()
+        from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
+        with patch.object(GoogleProxy, "is_active", return_value=True):
+            proxy = GoogleProxy(
+                manager=mgr,
+                name="proxy-stopped",
+                ip="35.0.0.40",
+                port=8080,
+                project="test-project",
+                region="us-central1",
+                zone="us-central1-a",
+                is_async=True,
+                reload=True,
+                on_exit="destroy",
+            )
+
+        proxy.stopped = True
+        proxy._stop_proxy(wait=False)
+        assert proxy.stopped is True
 
 
 # ============================================================================
