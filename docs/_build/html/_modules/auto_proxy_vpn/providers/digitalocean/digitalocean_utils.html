@@ -362,45 +362,27 @@
         <span class="k">return</span> <span class="s1">&#39;s-1vcpu-2gb&#39;</span><span class="p">,</span> <span class="n">servers</span></div>
 
 
-<div class="viewcode-block" id="get_next_proxy_name">
-<a class="viewcode-back" href="../../../../api/providers.html#auto_proxy_vpn.providers.digitalocean.digitalocean_utils.get_next_proxy_name">[docs]</a>
-<span class="k">def</span> <span class="nf">get_next_proxy_name</span><span class="p">(</span><span class="n">headers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<div class="viewcode-block" id="get_next_droplet_name">
+<a class="viewcode-back" href="../../../../api/providers.html#auto_proxy_vpn.providers.digitalocean.digitalocean_utils.get_next_droplet_name">[docs]</a>
+<span class="k">def</span> <span class="nf">get_next_droplet_name</span><span class="p">(</span><span class="n">headers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">is_vpn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&#39;&#39;&#39;</span>
-<span class="sd">    Get next avaliable proxy name.</span>
+<span class="sd">    Get next avaliable proxy or vpn name.</span>
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">droplets</span> <span class="o">=</span> <span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://api.digitalocean.com/v2/droplets?tag_name=proxy&#39;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s1">&#39;droplets&#39;</span><span class="p">]</span>
+        <span class="n">droplets</span> <span class="o">=</span> <span class="n">get</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;https://api.digitalocean.com/v2/droplets?tag_name=</span><span class="si">{</span><span class="s2">&quot;proxy&quot;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="n">is_vpn</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">&quot;vpn&quot;</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s1">&#39;droplets&#39;</span><span class="p">]</span>
     <span class="k">except</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span><span class="s1">&#39;Error connecting to DigitalOcean.&#39;</span><span class="p">)</span>
     
     <span class="k">if</span> <span class="n">name</span><span class="p">:</span>
         <span class="k">if</span> <span class="p">[</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">droplets</span> <span class="k">if</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">name</span><span class="p">]:</span>
-            <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Proxy </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> already exists!&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;VPN&#39;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">is_vpn</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;Proxy&#39;</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> already exists!&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">name</span>
     
-    <span class="n">names</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">droplets</span> <span class="k">if</span> <span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;^proxy\d+$&#39;</span><span class="p">,</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">])])</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">droplets</span> <span class="k">if</span> <span class="n">search</span><span class="p">(</span><span class="sa">rf</span><span class="s1">&#39;^</span><span class="si">{</span><span class="w"> </span><span class="s2">&quot;vpn&quot;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">is_vpn</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">&quot;proxy&quot;</span><span class="w"> </span><span class="si">}</span><span class="s1">\d+$&#39;</span><span class="p">,</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">])])</span>
     <span class="k">if</span> <span class="n">names</span><span class="p">:</span>
         <span class="n">last_name</span> <span class="o">=</span> <span class="n">names</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-        <span class="k">return</span> <span class="s1">&#39;proxy&#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">last_name</span><span class="p">[</span><span class="mi">5</span><span class="p">:])</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">return</span> <span class="s1">&#39;proxy1&#39;</span></div>
-
-
-<div class="viewcode-block" id="get_next_vpn_name">
-<a class="viewcode-back" href="../../../../api/providers.html#auto_proxy_vpn.providers.digitalocean.digitalocean_utils.get_next_vpn_name">[docs]</a>
-<span class="k">def</span> <span class="nf">get_next_vpn_name</span><span class="p">(</span><span class="n">headers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&#39;&#39;&#39;</span>
-<span class="sd">    Get next avaliable VPN name.</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">droplets</span> <span class="o">=</span> <span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://api.digitalocean.com/v2/droplets&#39;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s1">&#39;droplets&#39;</span><span class="p">]</span>
-    <span class="k">except</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span><span class="s1">&#39;Error connecting to DigitalOcean.&#39;</span><span class="p">)</span>
-    
-    <span class="n">names</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">droplets</span> <span class="k">if</span> <span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;^vpn\d+$&#39;</span><span class="p">,</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">])])</span>
-    <span class="k">if</span> <span class="n">names</span><span class="p">:</span>
-        <span class="n">last_name</span> <span class="o">=</span> <span class="n">names</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-        <span class="k">return</span> <span class="s1">&#39;vpn&#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">last_name</span><span class="p">[</span><span class="mi">3</span><span class="p">:])</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">return</span> <span class="s1">&#39;vpn1&#39;</span></div>
+        <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="s2">&quot;vpn&quot;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">is_vpn</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">&quot;proxy&quot;</span><span class="si">}{</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">last_name</span><span class="p">[</span><span class="mi">3</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">is_vpn</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="mi">5</span><span class="p">:])</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="s2">&quot;vpn&quot;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">is_vpn</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">&quot;proxy&quot;</span><span class="si">}</span><span class="s1">1&#39;</span></div>
 
 
 <div class="viewcode-block" id="start_proxy">
@@ -532,134 +514,6 @@
             <span class="n">ip</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
             <span class="n">error</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="k">except</span><span class="p">:</span>
-        <span class="n">ip</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
-        <span class="n">error</span> <span class="o">=</span> <span class="kc">True</span>
-    
-    <span class="k">return</span> <span class="n">new_droplet</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">],</span> <span class="n">ip</span><span class="p">,</span> <span class="n">error</span></div>
-
-
-<div class="viewcode-block" id="start_vpn">
-<a class="viewcode-back" href="../../../../api/providers.html#auto_proxy_vpn.providers.digitalocean.digitalocean_utils.start_vpn">[docs]</a>
-<span class="k">def</span> <span class="nf">start_vpn</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-              <span class="n">image</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-              <span class="n">region</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-              <span class="n">size</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-              <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-              <span class="n">ssh_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
-              <span class="n">num_users</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-              <span class="n">ftp_password</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-              <span class="n">allowed_ips</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-              <span class="n">headers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
-              <span class="n">regions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-              <span class="n">output</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-              <span class="n">is_async</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-              <span class="n">retry</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-              <span class="n">times</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
-    
-    <span class="n">image_commands</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;#!/bin/bash</span>
-
-<span class="s2">rm -R /etc/ssh/sshd_config.d/*</span>
-
-<span class="s2">echo -e &#39;</span><span class="si">{</span><span class="n">ftp_password</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">ftp_password</span><span class="si">}</span><span class="s2">&#39; | passwd root</span>
-
-<span class="s2">systemctl restart sshd.service</span>
-
-<span class="s2">cd ~</span>
-<span class="s2">mkdir wireward</span>
-<span class="s2">cd wireward</span>
-
-<span class="s2">echo &quot;services:</span>
-<span class="s2">  wireguard:</span>
-<span class="s2">    image: lscr.io/linuxserver/wireguard:latest</span>
-<span class="s2">    container_name: wireguard</span>
-<span class="s2">    cap_add:</span>
-<span class="s2">      - NET_ADMIN</span>
-<span class="s2">      - SYS_MODULE</span>
-<span class="s2">    environment:</span>
-<span class="s2">      - PUID=1000</span>
-<span class="s2">      - PGID=1000</span>
-<span class="s2">      - TZ=Europe/Madrid</span>
-<span class="s2">      - SERVERURL=auto</span>
-<span class="s2">      - PEERS=</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">num_users</span><span class="p">)</span><span class="si">}</span>
-<span class="s2">      - PEERDNS=auto</span>
-<span class="s2">      - INTERNAL_SUBNET=10.13.13.0</span>
-<span class="s2">      - ALLOWEDIPS=</span><span class="si">{</span><span class="n">allowed_ips</span><span class="si">}</span>
-<span class="s2">      - LOG_CONFS=false</span>
-<span class="s2">    volumes:</span>
-<span class="s2">      - ./config:/config</span>
-<span class="s2">      - /lib/modules:/lib/modules</span>
-<span class="s2">    ports:</span>
-<span class="s2">      - </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">port</span><span class="p">)</span><span class="si">}</span><span class="s2">:51820/udp</span>
-<span class="s2">    sysctls:</span>
-<span class="s2">      - net.ipv4.conf.all.src_valid_mark=1</span>
-<span class="s2">    restart: always&quot; &gt; docker-compose.yml</span>
-
-<span class="s2">docker compose up -d&quot;&quot;&quot;</span>
-
-    <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
-        <span class="s2">&quot;region&quot;</span><span class="p">:</span> <span class="n">region</span><span class="p">,</span>
-        <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="n">size</span><span class="p">,</span>
-        <span class="s2">&quot;image&quot;</span><span class="p">:</span> <span class="n">image</span><span class="p">,</span>
-        <span class="s2">&quot;ssh_keys&quot;</span><span class="p">:</span> <span class="n">ssh_keys</span><span class="p">,</span>
-        <span class="s2">&quot;tags&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;vpn&quot;</span><span class="p">],</span>
-        <span class="s2">&quot;user_data&quot;</span><span class="p">:</span> <span class="n">image_commands</span><span class="p">,</span>
-        <span class="s2">&quot;with_droplet_agent&quot;</span><span class="p">:</span> <span class="kc">False</span>
-    <span class="p">}</span>
-    
-    <span class="n">new_droplet</span> <span class="o">=</span> <span class="n">post</span><span class="p">(</span><span class="s1">&#39;https://api.digitalocean.com/v2/droplets&#39;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
-    
-    <span class="k">if</span> <span class="n">new_droplet</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">202</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">new_droplet</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">422</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">output</span><span class="p">:</span>
-                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;The region &#39;</span><span class="o">+</span><span class="n">region</span><span class="o">+</span><span class="s2">&quot; isn&#39;t avaliable.&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">retry</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">times</span> <span class="o">==</span> <span class="mi">5</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">output</span><span class="p">:</span>
-                        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Something going wrong in digitalocean...&#39;</span><span class="p">)</span>
-                    <span class="k">return</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="kc">True</span>
-                <span class="n">regions</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">region</span><span class="p">)</span>
-                <span class="n">local_regions</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">regions</span> <span class="k">if</span> <span class="n">x</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">region</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
-                <span class="k">if</span> <span class="n">local_regions</span><span class="p">:</span>
-                    <span class="n">region</span> <span class="o">=</span> <span class="n">choice</span><span class="p">(</span><span class="n">local_regions</span><span class="p">)</span> <span class="c1"># type: ignore</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">output</span><span class="p">:</span>
-                        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;No servers in &#39;</span><span class="o">+</span><span class="n">region</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39; are avaliable.&#39;</span><span class="p">)</span>
-                    <span class="n">region</span> <span class="o">=</span> <span class="n">choice</span><span class="p">(</span><span class="n">regions</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">output</span><span class="p">:</span>
-                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Starting a new vpn in the region &quot;</span><span class="o">+</span><span class="n">region</span><span class="o">+</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
-                <span class="k">return</span> <span class="n">start_vpn</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">region</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">ssh_keys</span><span class="p">,</span> <span class="n">num_users</span><span class="p">,</span> <span class="n">ftp_password</span><span class="p">,</span> <span class="n">allowed_ips</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">regions</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">is_async</span><span class="p">,</span> <span class="n">times</span><span class="o">=</span><span class="n">times</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">output</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Something going wrong in digitalocean...&#39;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="kc">True</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">new_droplet</span> <span class="o">=</span> <span class="n">new_droplet</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s1">&#39;droplet&#39;</span><span class="p">]</span>
-    
-    <span class="n">times</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">error</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">is_async</span><span class="p">:</span>
-        <span class="k">while</span> <span class="n">new_droplet</span><span class="p">[</span><span class="s1">&#39;status&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="s1">&#39;active&#39;</span> <span class="ow">and</span> <span class="n">times</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
-            <span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">new_droplet</span> <span class="o">=</span> <span class="n">get</span><span class="p">(</span><span class="s1">&#39;https://api.digitalocean.com/v2/droplets/&#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">new_droplet</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]),</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s1">&#39;droplet&#39;</span><span class="p">]</span>
-            <span class="k">except</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">output</span><span class="p">:</span>
-                    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Error checking the status of the droplet... Trying again...&#39;</span><span class="p">)</span>
-                <span class="n">times</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">new_droplet</span><span class="p">[</span><span class="s1">&#39;status&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;active&#39;</span><span class="p">:</span>
-            <span class="n">error</span> <span class="o">=</span> <span class="kc">True</span>
-        
-    
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">ip</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">new_droplet</span><span class="p">[</span><span class="s1">&#39;networks&#39;</span><span class="p">][</span><span class="s1">&#39;v4&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;public&#39;</span><span class="p">]</span>
-    <span class="k">except</span><span class="p">:</span>
-        <span class="n">ip</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
-        <span class="n">error</span> <span class="o">=</span> <span class="kc">True</span>
-        
-    <span class="k">if</span> <span class="n">ip</span><span class="p">:</span>
-        <span class="n">ip</span> <span class="o">=</span> <span class="n">ip</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;ip_address&#39;</span><span class="p">]</span>
-    <span class="k">else</span><span class="p">:</span>
         <span class="n">ip</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
         <span class="n">error</span> <span class="o">=</span> <span class="kc">True</span>
     

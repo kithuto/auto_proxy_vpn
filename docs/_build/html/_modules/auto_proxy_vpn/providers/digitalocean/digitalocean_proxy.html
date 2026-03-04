@@ -260,7 +260,7 @@
 
 <span class="kn">from</span> <span class="nn">auto_proxy_vpn</span> <span class="kn">import</span> <span class="n">CloudProvider</span><span class="p">,</span> <span class="n">ProxyManagers</span><span class="p">,</span> <span class="n">ManagerRuntimeConfig</span><span class="p">,</span> <span class="n">DigitalOceanConfig</span>
 <span class="kn">from</span> <span class="nn">auto_proxy_vpn.utils.base_proxy</span> <span class="kn">import</span> <span class="n">BaseProxy</span><span class="p">,</span> <span class="n">BaseProxyManager</span>
-<span class="kn">from</span> <span class="nn">.digitalocean_utils</span> <span class="kn">import</span> <span class="n">get_or_create_project</span><span class="p">,</span> <span class="n">get_or_create_ssh_keys</span><span class="p">,</span> <span class="n">get_servers_and_size</span><span class="p">,</span> <span class="n">start_proxy</span><span class="p">,</span> <span class="n">get_next_proxy_name</span>
+<span class="kn">from</span> <span class="nn">.digitalocean_utils</span> <span class="kn">import</span> <span class="n">get_or_create_project</span><span class="p">,</span> <span class="n">get_or_create_ssh_keys</span><span class="p">,</span> <span class="n">get_servers_and_size</span><span class="p">,</span> <span class="n">start_proxy</span><span class="p">,</span> <span class="n">get_next_droplet_name</span>
 <span class="kn">from</span> <span class="nn">.digitalocean_exceptions</span> <span class="kn">import</span> <span class="n">DropletNotProxyException</span>
 <span class="kn">from</span> <span class="nn">auto_proxy_vpn.utils.exceptions</span> <span class="kn">import</span> <span class="n">CountryNotAvailableException</span>
 <span class="kn">from</span> <span class="nn">auto_proxy_vpn.utils.util</span> <span class="kn">import</span> <span class="n">get_public_ip</span>
@@ -605,7 +605,7 @@
 <span class="sd">        &#39;&#39;&#39;</span>
         
         <span class="n">retry</span> <span class="o">=</span> <span class="n">retry</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">region</span> <span class="k">else</span> <span class="kc">False</span>
-        <span class="n">proxy_name</span> <span class="o">=</span> <span class="n">get_next_proxy_name</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_headers</span><span class="p">,</span> <span class="n">proxy_name</span><span class="p">)</span>
+        <span class="n">proxy_name</span> <span class="o">=</span> <span class="n">get_next_droplet_name</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_headers</span><span class="p">,</span> <span class="n">proxy_name</span><span class="p">)</span>
         
         <span class="k">if</span> <span class="ow">not</span> <span class="n">port</span><span class="p">:</span>
             <span class="n">port</span> <span class="o">=</span> <span class="n">randint</span><span class="p">(</span><span class="mi">10000</span><span class="p">,</span> <span class="mi">65000</span><span class="p">)</span>

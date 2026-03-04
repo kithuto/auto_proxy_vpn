@@ -67,13 +67,19 @@
 pip install auto_proxy_vpn
 ```
 
-Then install the SDK dependencies for the providers you plan to use:
+Then install provider-specific optional dependencies (extras):
 
 | Provider | Extra packages |
 |---|---|
 | **DigitalOcean** | *(none — uses `requests`, already included)* |
-| **Google Cloud** | `pip install google-cloud-compute` |
-| **Azure** | `pip install azure-identity azure-mgmt-subscription azure-mgmt-resource azure-mgmt-network azure-mgmt-compute` |
+| **Google Cloud** | `pip install auto_proxy_vpn[google]` |
+| **Azure** | `pip install auto_proxy_vpn[azure]` |
+
+Install multiple extras together if needed:
+
+```bash
+pip install auto_proxy_vpn[google,azure]
+```
 
 ## Quick Start
 
@@ -157,9 +163,9 @@ with pool.create_batch(6) as batch:
 
 | Provider | Proxy | VPN | Status |
 |---|---|---|---|
-| **Google Cloud** | Yes | No | Stable |
+| **Google Cloud** | Yes | - | Stable |
 | **Azure** | Yes | — | Stable |
-| **DigitalOcean** | Yes | Yes | Stable |
+| **DigitalOcean** | Yes | - | Stable |
 | AWS | — | — | Planned |
 | Oracle Cloud | — | — | Planned |
 | Alibaba Cloud | — | — | Planned |
@@ -441,21 +447,6 @@ DigitalOceanConfig(
 )
 ```
 
-#### `ManagerRuntimeConfig`
-
-Shared logging configuration passed to all managers.
-
-```python
-from auto_proxy_vpn import ManagerRuntimeConfig
-
-ManagerRuntimeConfig(
-    log=True,
-    log_file=None,
-    log_format="%(asctime)-10s %(levelname)-5s %(message)s",
-    logger=None,
-)
-```
-
 ---
 
 ### Common `get_proxy()` Parameters
@@ -516,7 +507,7 @@ auto_proxy_vpn/
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) guide for detailed information on:
+Contributions are welcome! Please read [contributing docs](CONTRIBUTING.md) guide for detailed information on:
 
 - Reporting bugs and suggesting features
 - Development setup and workflow

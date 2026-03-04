@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "auto_proxy_vpn"
 version = "0.0.1"
 description = "A package to create on demand proxies and vpns in different cloud providers."
+keywords = ["vpn", "proxy", "networking", "cloud", "security", "web scrapping"]
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.9"
@@ -15,6 +16,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Internet :: Proxy Servers",
+    "Topic :: Security",
     "Topic :: System :: Networking",
 ]
 
@@ -41,8 +43,7 @@ markers = [
     "integration: Integration tests requiring real cloud credentials (skipped by default)",
     "digitalocean: Tests requiring a DigitalOcean token",
     "google: Tests requiring Google Cloud credentials",
-    "azure: Tests requiring Azure credentials",
-    "slow: Tests that take a long time to run",
+    "azure: Tests requiring Azure credentials"
 ]
 addopts = [
     "-v",

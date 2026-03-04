@@ -24,10 +24,7 @@ Provision on-demand HTTP(S) proxy servers on **Google Compute Engine** instances
 ## Installation
 
 ```bash
-pip install auto_proxy_vpn
-
-# Install Google Cloud SDK dependency
-pip install google-cloud-compute
+pip install auto_proxy_vpn[google]
 ```
 
 ## Google Cloud Credentials Setup

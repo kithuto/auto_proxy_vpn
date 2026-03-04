@@ -323,7 +323,7 @@
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>auto_proxy_vpn
 </pre></div>
 </div>
-<p>Then install the SDK dependencies for the providers you plan to use:</p>
+<p>Then install provider-specific optional dependencies (extras):</p>
 <div class="table-wrapper colwidths-auto docutils container">
 <table class="docutils align-default">
 <thead>
@@ -336,13 +336,17 @@
 <td><p><em>(none — uses <code class="docutils literal notranslate"><span class="pre">requests</span></code>, already included)</em></p></td>
 </tr>
 <tr class="row-odd"><td><p><strong>Google Cloud</strong></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">google-cloud-compute</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">auto_proxy_vpn[google]</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><strong>Azure</strong></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">azure-identity</span> <span class="pre">azure-mgmt-subscription</span> <span class="pre">azure-mgmt-resource</span> <span class="pre">azure-mgmt-network</span> <span class="pre">azure-mgmt-compute</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">auto_proxy_vpn[azure]</span></code></p></td>
 </tr>
 </tbody>
 </table>
+</div>
+<p>Install multiple extras together if needed:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>auto_proxy_vpn<span class="o">[</span>google,azure<span class="o">]</span>
+</pre></div>
 </div>
 </section>
 <section id="quick-start">
@@ -437,7 +441,7 @@
 <tbody>
 <tr class="row-even"><td><p><strong>Google Cloud</strong></p></td>
 <td><p>Yes</p></td>
-<td><p>No</p></td>
+<td><p>-</p></td>
 <td><p>Stable</p></td>
 </tr>
 <tr class="row-odd"><td><p><strong>Azure</strong></p></td>
@@ -447,7 +451,7 @@
 </tr>
 <tr class="row-even"><td><p><strong>DigitalOcean</strong></p></td>
 <td><p>Yes</p></td>
-<td><p>Yes</p></td>
+<td><p>-</p></td>
 <td><p>Stable</p></td>
 </tr>
 <tr class="row-odd"><td><p>AWS</p></td>
@@ -820,20 +824,6 @@
     <span class="n">token</span><span class="o">=</span><span class="s2">&quot;dop_v1_xxxx...&quot;</span><span class="p">,</span>         <span class="c1"># or env var DIGITALOCEAN_API_TOKEN</span>
     <span class="n">project_name</span><span class="o">=</span><span class="s2">&quot;AutoProxyVPN&quot;</span><span class="p">,</span>
     <span class="n">project_description</span><span class="o">=</span><span class="s2">&quot;On demand proxies&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="managerruntimeconfig">
-<h3><code class="docutils literal notranslate"><span class="pre">ManagerRuntimeConfig</span></code><a class="headerlink" href="#managerruntimeconfig" title="Link to this heading">¶</a></h3>
-<p>Shared logging configuration passed to all managers.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">auto_proxy_vpn</span> <span class="kn">import</span> <span class="n">ManagerRuntimeConfig</span>
-
-<span class="n">ManagerRuntimeConfig</span><span class="p">(</span>
-    <span class="n">log</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">log_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">log_format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)-10s</span><span class="s2"> </span><span class="si">%(levelname)-5s</span><span class="s2"> </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span>
-    <span class="n">logger</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>

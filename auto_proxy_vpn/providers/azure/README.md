@@ -28,10 +28,7 @@ Provision on-demand HTTP(S) proxy servers on **Azure Virtual Machines** with a s
 ## Installation
 
 ```bash
-pip install auto_proxy_vpn
-
-# Install Azure SDK dependencies
-pip install azure-identity azure-mgmt-subscription azure-mgmt-resource azure-mgmt-network azure-mgmt-compute
+pip install auto_proxy_vpn[azure]
 ```
 
 ## Azure Credentials Setup

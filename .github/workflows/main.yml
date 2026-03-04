@@ -99,7 +99,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read package version from pyproject.toml
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist
+
+      - name: Read package version from built distributions
         id: version
         run: |
           VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
@@ -117,12 +123,6 @@ jobs:
         run: |
           git tag "${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
-
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist-artifacts
-          path: dist
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

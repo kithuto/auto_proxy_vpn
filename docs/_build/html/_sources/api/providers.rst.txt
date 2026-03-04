@@ -38,7 +38,3 @@ DigitalOcean
 .. automodule:: auto_proxy_vpn.providers.digitalocean.digitalocean_exceptions
    :members:
    :show-inheritance:
-
-.. automodule:: auto_proxy_vpn.providers.digitalocean.digitalocean_vpn
-   :members:
-   :show-inheritance:
