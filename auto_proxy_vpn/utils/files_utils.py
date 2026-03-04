@@ -2,6 +2,15 @@ def get_ips_str(ips_list: list[str]):
     return "\n".join([f"acl custom_ips src {ip}" for ip in ips_list])
 
 def get_squid_file(port: int, user: str = '', password: str = "", allowed_ips: list[str] = []) -> str:
+    allowed_ips_str = f"{get_ips_str(allowed_ips)+'\nhttp_access allow custom_ips' if allowed_ips else ''}"
+    auth_str = f"""#auth credentials: user: {user}, password: {password}
+auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwords
+auth_param basic realm proxy
+acl authenticated proxy_auth REQUIRED
+http_access allow authenticated
+{allowed_ips_str}
+http_access deny all""" if user else ("http_access allow all" if not allowed_ips else get_ips_str(allowed_ips)+"\nhttp_access allow custom_ips\nhttp_access deny all")
+    
     return f"""#!/bin/bash
 
 apt update
@@ -31,13 +40,7 @@ header_access X-Forwarded-For deny all
 header_access Pragma deny all
 header_access Keep-Alive deny all
 
-{f"""#auth credentials: user: {user}, password: {password}
-auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwords
-auth_param basic realm proxy
-acl authenticated proxy_auth REQUIRED
-http_access allow authenticated
-{get_ips_str(allowed_ips)+"\nhttp_access allow custom_ips" if allowed_ips else ""}
-http_access deny all""" if user else ("http_access allow all" if not allowed_ips else get_ips_str(allowed_ips)+"\nhttp_access allow custom_ips\nhttp_access deny all")}
+{auth_str}
 
 http_port {str(port)}
 
