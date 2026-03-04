@@ -11,8 +11,12 @@ Run with::
 
 import os
 import pytest
+from pathlib import Path
 
-pytestmark = [pytest.mark.integration, pytest.mark.google, pytest.mark.slow]
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
+
+pytestmark = [pytest.mark.integration, pytest.mark.google]
 
 CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 PROJECT = os.environ.get("GOOGLE_PROJECT", "")

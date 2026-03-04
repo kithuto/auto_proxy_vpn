@@ -15,9 +15,13 @@ Run with::
 """
 
 import os
+from pathlib import Path
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.azure, pytest.mark.slow]
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
+
+pytestmark = [pytest.mark.integration, pytest.mark.azure]
 
 SUBSCRIPTION_ID = os.environ.get("AZURE_SUBSCRIPTION_ID", "")
 SSH_KEY = os.environ.get("AZURE_SSH_KEY", "")
@@ -28,7 +32,6 @@ skip_if_no_creds = pytest.mark.skipif(
     reason=skip_reason,
 )
 
-
 @skip_if_no_creds
 class TestAzureIntegration:
     """End-to-end tests that create real Azure VMs."""
@@ -38,7 +41,6 @@ class TestAzureIntegration:
         from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
         return ProxyManagerAzure(
             ssh_key=SSH_KEY,
-            credentials=SUBSCRIPTION_ID,
             log=False,
         )
 

@@ -11,8 +11,12 @@ Run with::
 
 import os
 import pytest
+from pathlib import Path
 
-pytestmark = [pytest.mark.integration, pytest.mark.digitalocean, pytest.mark.slow]
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
+
+pytestmark = [pytest.mark.integration, pytest.mark.digitalocean]
 
 TOKEN = os.environ.get("DIGITALOCEAN_API_TOKEN", "")
 SSH_KEY_NAME = os.environ.get("DO_SSH_KEY_NAME", "")

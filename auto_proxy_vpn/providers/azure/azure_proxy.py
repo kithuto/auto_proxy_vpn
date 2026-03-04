@@ -281,7 +281,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             
         # check azure imports
         try:
-            from azure.identity import DefaultAzureCredential
+            from azure.identity import DefaultAzureCredential, ClientSecretCredential
             from azure.mgmt.subscription import SubscriptionClient
             from azure.mgmt.resource import ResourceManagementClient
             from azure.mgmt.network import NetworkManagementClient
@@ -297,7 +297,15 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             raise ImportError("Install azure-identity and azure-mgmt packages to use the azure proxies.\n"
                               "             python3 -m pip install azure-identity azure-mgmt-subscription azure-mgmt-resource azure-mgmt-network azure-mgmt-compute")
         
-        credential = DefaultAzureCredential()
+        if isinstance(credentials, dict) and "AZURE_TENANT_ID" in credentials:
+            credential = ClientSecretCredential(
+                tenant_id=credentials.get("AZURE_TENANT_ID", ''),
+                client_id=credentials.get("AZURE_CLIENT_ID", ''),
+                client_secret=credentials.get("AZURE_CLIENT_SECRET", ''),
+            )
+        else:
+            credential = DefaultAzureCredential()
+            
         subscription_id = environ.get("AZURE_SUBSCRIPTION_ID", "")
         if credentials:
             if isinstance(credentials, str):
