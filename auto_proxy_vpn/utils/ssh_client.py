@@ -20,7 +20,7 @@ class SSHClient():
         self.ip = ip
         self.user = user
         # No strict host key Checking if strict = False
-        self.ssh_command = f"ssh{" -o StrictHostKeyChecking=no" if not strict else ""} {user}@{ip}"
+        self.ssh_command = f"ssh{' -o StrictHostKeyChecking=no' if not strict else ''} {user}@{ip}"
         
     def connect(self):
         """

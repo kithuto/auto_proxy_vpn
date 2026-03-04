@@ -44,17 +44,17 @@ class TestDigitalOceanConfig:
         assert key == (CloudProvider.DIGITALOCEAN, "fake-do-token-1234")
 
     def test_different_tokens_produce_different_keys(self):
-        c1 = DigitalOceanConfig(token="tok-a")
-        c2 = DigitalOceanConfig(token="tok-b")
+        c1 = DigitalOceanConfig(token="tok-a", ssh_key="a")
+        c2 = DigitalOceanConfig(token="tok-b", ssh_key="b")
         assert c1.unique_key() != c2.unique_key()
 
     def test_same_tokens_produce_equal_keys(self):
-        c1 = DigitalOceanConfig(token="same")
-        c2 = DigitalOceanConfig(token="same")
+        c1 = DigitalOceanConfig(token="same", ssh_key="same")
+        c2 = DigitalOceanConfig(token="same", ssh_key="same")
         assert c1.unique_key() == c2.unique_key()
 
     def test_default_values(self):
-        cfg = DigitalOceanConfig()
+        cfg = DigitalOceanConfig(ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
         assert cfg.project_name == "AutoProxyVPN"
         assert cfg.project_description == "On demand proxies"
         assert cfg.token == ""
@@ -74,12 +74,12 @@ class TestGoogleConfig:
 
     def test_unique_key_falls_back_to_env_when_no_credentials(self):
         with patch.dict(environ, {"GOOGLE_APPLICATION_CREDENTIALS": "/env/path.json"}):
-            cfg = GoogleConfig(project="proj")
+            cfg = GoogleConfig(project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
             assert cfg.unique_key() == (CloudProvider.GOOGLE, "/env/path.json")
 
     def test_unique_key_empty_when_no_credentials_and_no_env(self):
         with patch.dict(environ, {}, clear=True):
-            cfg = GoogleConfig(project="proj")
+            cfg = GoogleConfig(project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
             assert cfg.unique_key() == (CloudProvider.GOOGLE, "")
 
 
@@ -96,15 +96,15 @@ class TestAzureConfig:
         assert key == (CloudProvider.AZURE, "fake-subscription-id")
 
     def test_unique_key_with_dict_credentials(self):
-        cfg = AzureConfig(credentials={"AZURE_SUBSCRIPTION_ID": "sub-123"})
+        cfg = AzureConfig(credentials={"AZURE_SUBSCRIPTION_ID": "sub-123"}, ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
         assert cfg.unique_key() == (CloudProvider.AZURE, "sub-123")
 
     def test_unique_key_falls_back_to_env(self):
         with patch.dict(environ, {"AZURE_SUBSCRIPTION_ID": "env-sub"}):
-            cfg = AzureConfig(credentials={})
+            cfg = AzureConfig(credentials={}, ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
             assert cfg.unique_key() == (CloudProvider.AZURE, "env-sub")
 
     def test_unique_key_empty_when_nothing(self):
         with patch.dict(environ, {}, clear=True):
-            cfg = AzureConfig(credentials="")
+            cfg = AzureConfig(credentials="", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
             assert cfg.unique_key() == (CloudProvider.AZURE, "")

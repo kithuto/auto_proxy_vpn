@@ -103,11 +103,15 @@ class DigitalOceanProxy(BaseProxy):
                 self.logger.info('Waitting for the proxy to be set up...')
             self.active = self.is_active()
             if self.logger:
-                self.logger.info(f'New DigitalOcean proxy{' '+self.get_proxy_str() if self.get_proxy_str() else ''} created {"and ready to use" if self.active else "but not active yet"}.')
+                proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                status = "and ready to use" if self.active else "but not active yet"
+                self.logger.info(f"New DigitalOcean proxy{proxy_suffix} created {status}.")
         elif reload:
             self.active = self.is_active()
             if self.logger:
-                self.logger.info(f'DigitalOcean proxy{' '+self.get_proxy_str() if self.get_proxy_str() else ''} reloaded and {"active" if self.active else "inactive"}.')
+                proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                status = "active" if self.active else "inactive"
+                self.logger.info(f"DigitalOcean proxy{proxy_suffix} reloaded and {status}.")
     
     def is_active(self, wait: bool = False) -> bool:
         if not self._digitalocean_active:
@@ -368,7 +372,8 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
                 allowed_ips = []
 
         if self.logger:
-            self.logger.info(f"Starting a new DigitalOcean proxy in the region {region}{f" for the user {auth['user']}" if auth else " with no authentification"}...")
+            user_suffix = f" for the user {auth['user']}" if auth else " with no authentification"
+            self.logger.info(f"Starting a new DigitalOcean proxy in the region {region}{user_suffix}...")
         
         proxy_id, proxy_ip, error = start_proxy(proxy_name, self.proxy_image, region, proxy_size, port, self.ssh_keys, self._headers, servers, self.logger, allowed_ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async, retry) # type: ignore
         
@@ -439,7 +444,8 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             auth['password'] = auth_search.group(2)
             
         if self.logger:
-            self.logger.info(f"DigitalOcean proxy {name} reloaded with IP {public_ip} and port {port}{f" for the user {auth['user']}" if auth else " with no authentification found"}")
+            user_suffix = f" for the user {auth['user']}" if auth else " with no authentification found"
+            self.logger.info(f"DigitalOcean proxy {name} reloaded with IP {public_ip} and port {port}{user_suffix}")
         
         return DigitalOceanProxy(droplet['id'], name, public_ip, port, droplet['region']['slug'], self._token, active=False, is_async=is_async, user=auth['user'] if auth else '', password=auth['password'] if auth else '', logger=self.logger, reload=True, on_exit=on_exit)
     

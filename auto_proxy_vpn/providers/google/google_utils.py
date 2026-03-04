@@ -82,7 +82,7 @@ def get_avaliable_regions_by_size(compute_v1, machine_types_client, project: str
     region_by_size: dict[Literal["small", "medium", "large"], list[str] | list[tuple[str, list[str]]]] = {size: [] for size in instance_proxy_sizes.keys()}
     
     # For a faster initialization only the first vm size will be called with de google api because the rest of the sizes has the same avaliable regions as the first one
-    request = compute_v1.AggregatedListMachineTypesRequest(project=project, filter=f'name={instance_proxy_sizes['small']}')
+    request = compute_v1.AggregatedListMachineTypesRequest(project=project, filter=f"name={instance_proxy_sizes['small']}")
     zones = machine_types_client.aggregated_list(request=request)
     
     regions_dict: defaultdict[str, list[str]] = defaultdict(list)

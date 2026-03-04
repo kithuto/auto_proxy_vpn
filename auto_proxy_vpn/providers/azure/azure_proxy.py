@@ -101,11 +101,15 @@ class AzureProxy(BaseProxy):
                 self.logger.info('Waitting for the azure proxy to be set up...')
             self.active = self.is_active()
             if self.logger:
-                self.logger.info(f'New azure proxy{' '+self.get_proxy_str() if self.get_proxy_str() else ''} created {"and ready to use" if self.active else "but not active yet"}.')
+                proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                status = "and ready to use" if self.active else "but not active yet"
+                self.logger.info(f"New azure proxy{proxy_suffix} created {status}.")
         elif reload:
             self.active = self.is_active()
             if self.logger:
-                self.logger.info(f'Azure proxy{' '+self.get_proxy_str() if self.get_proxy_str() else ''} reloaded and {"active" if self.active else "inactive"}.')
+                proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                status = "active" if self.active else "inactive"
+                self.logger.info(f"Azure proxy{proxy_suffix} reloaded and {status}.")
     
     def is_active(self, wait = False) -> bool:
         if not self._vm_started:
@@ -461,7 +465,8 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             ips.append(ip)
         
         if self.logger:
-            self.logger.info(f"Starting a new azure proxy in the region {region}{f" for the user {auth['user']}" if auth else " with no authentification"}...")
+            user_suffix = f" for the user {auth['user']}" if auth else " with no authentification"
+            self.logger.info(f"Starting a new azure proxy in the region {region}{user_suffix}...")
         
         proxy_ip, error = start_proxy(self, proxy_name, port, region, proxy_size, ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async)
         if error and retry and random_region:
@@ -555,7 +560,8 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             auth['password'] = auth_search.group(2)
         
         if self.logger:
-            self.logger.info(f"Azure proxy {name} reloaded with IP {ip} and port {port}{f" for the user {auth['user']}" if auth else " with no authentification found"}...")
+            user_suffix = f" for the user {auth['user']}" if auth else " with no authentification found"
+            self.logger.info(f"Azure proxy {name} reloaded with IP {ip} and port {port}{user_suffix}...")
         
         return AzureProxy(self, name, ip, port, region, proxy_instance=vm_size, allowed_ips=allowed_ips, is_async=is_async, user=auth.get('user', ''), password=auth.get('password', ''), logger=self.logger, reload=True, on_exit=on_exit)
     

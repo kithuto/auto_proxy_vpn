@@ -6,17 +6,17 @@ from os import environ
 
 from auto_proxy_vpn import CloudProvider
 
-@dataclass(slots=True)
+@dataclass
 class ManagerRuntimeConfig:
     log: bool = True
     log_file: str | None = None
     log_format: str = '%(asctime)-10s %(levelname)-5s %(message)s'
     logger: Logger | None = None
 
-@dataclass(kw_only=True)
+@dataclass
 class BaseConfig(ABC):
     provider: ClassVar['CloudProvider']
-    ssh_key: list[dict[str, str] | str] | dict[str, str] | str = field(default_factory=list)
+    ssh_key: list[dict[str, str] | str] | dict[str, str] | str
     
     @abstractmethod
     def unique_key(self) -> tuple[CloudProvider, str]:
