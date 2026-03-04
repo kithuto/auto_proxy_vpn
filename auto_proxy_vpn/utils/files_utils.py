@@ -2,7 +2,7 @@ def get_ips_str(ips_list: list[str]):
     return "\n".join([f"acl custom_ips src {ip}" for ip in ips_list])
 
 def get_squid_file(port: int, user: str = '', password: str = "", allowed_ips: list[str] = []) -> str:
-    allowed_ips_str = f"{get_ips_str(allowed_ips)+'\nhttp_access allow custom_ips' if allowed_ips else ''}"
+    allowed_ips_str = get_ips_str(allowed_ips)+'\nhttp_access allow custom_ips' if allowed_ips else ''
     auth_str = f"""#auth credentials: user: {user}, password: {password}
 auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwords
 auth_param basic realm proxy
