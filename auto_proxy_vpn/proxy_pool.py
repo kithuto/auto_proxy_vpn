@@ -1,6 +1,7 @@
 from random import shuffle
 from logging import INFO, Logger, basicConfig, getLogger
 from typing import Literal
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from auto_proxy_vpn import ProxyManagers, BaseConfig, ManagerRuntimeConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxyManager, BaseProxy, ProxyBatch
@@ -248,9 +249,27 @@ class ProxyPool:
         distribution = [base + (1 if i < remainder else 0) for i in range(len(self.managers))]
         
         proxies = []
-        for num_proxies in distribution:
-            if num_proxies > 0:
-                manager = self.random_manager_picker.next()
-                proxies.extend(manager.get_proxies(num_proxies, ports, sizes, regions, auths, allowed_ips, is_async, retry, proxy_names, on_exit).proxies)
+        futures = []
+        with ThreadPoolExecutor(max_workers=len(self.managers)) as executor:
+            for num_proxies in distribution:
+                if num_proxies > 0:
+                    manager = self.random_manager_picker.next()
+                    futures.append(
+                        executor.submit(
+                            manager.get_proxies,
+                            num_proxies,
+                            ports,
+                            sizes,
+                            regions,
+                            auths,
+                            allowed_ips,
+                            is_async,
+                            retry,
+                            proxy_names,
+                            on_exit,
+                        )
+                    )
+            for future in as_completed(futures):
+                proxies.extend(future.result().proxies)
         
         return ProxyBatch[BaseProxy](proxies)

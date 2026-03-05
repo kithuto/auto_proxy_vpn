@@ -20,6 +20,11 @@ classifiers = [
     "Topic :: System :: Networking",
 ]
 
+[project.urls]
+Homepage = "https://kithuto.github.io/auto_proxy_vpn/readme.html"
+Repository = "https://github.com/kithuto/auto_proxy_vpn"
+Documentation = "https://kithuto.github.io/auto_proxy_vpn/readme.html"
+
 [project.optional-dependencies]
 test = [
     "pytest",
