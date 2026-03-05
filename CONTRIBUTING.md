@@ -272,7 +272,7 @@ pytest
 
 ## Updating Documentation
 
-The project uses [Sphinx](https://www.sphinx-doc.org/) with the [furo](https://pradyunsg.me/furo/) theme to generate HTML documentation from:
+The project uses [Sphinx](https://www.sphinx-doc.org/) with the [Read the Docs theme](https://sphinx-rtd-theme.readthedocs.io/) to generate HTML documentation from:
 
 - **Markdown files** — `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, and each provider's `README.md`  are pulled into Sphinx via [MyST-Parser](https://myst-parser.readthedocs.io/).
 - **Docstrings** — API reference pages are auto-generated from NumPy-style docstrings in the source code.
@@ -280,7 +280,7 @@ The project uses [Sphinx](https://www.sphinx-doc.org/) with the [furo](https://p
 ### Install docs dependencies
 
 ```bash
-pip install sphinx furo myst-parser sphinx-autodoc-typehints
+pip install sphinx sphinx_rtd_theme myst-parser sphinx-autodoc-typehints
 ```
 
 ### Build the docs locally
@@ -336,11 +336,11 @@ docs/
 
 ## Submitting a Pull Request
 
-1. **Rebase on `main`** before submitting:
+1. **Rebase on `dev`** before submitting:
 
    ```bash
    git fetch origin
-   git rebase origin/main
+    git rebase origin/dev
    ```
 
 2. **Read through your own diff** — you'd be surprised how many issues you catch this way.
@@ -351,4 +351,5 @@ docs/
 
 5. I'll review it as soon as I can. If I request changes, just push updates to the same branch.
 
-6. Once everything looks good, I'll merge it into `main`.
+6. Once everything looks good, I'll merge it into `dev`.
+7. I will promote `dev` to `main` and publish to PyPI once everything checks out.
