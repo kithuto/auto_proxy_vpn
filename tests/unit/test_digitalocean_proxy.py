@@ -12,6 +12,7 @@ from tests.conftest import make_do_regions_response, make_do_droplet
 
 
 DO_API = "https://api.digitalocean.com/v2"
+VALID_SSH_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDtTestKeyMaterialForUnitTestsOnly"
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +71,7 @@ class TestProxyManagerDigitalOceanInit:
         from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValueError, match="token not provided"):
-                ProxyManagerDigitalOcean(ssh_key="key")
+                ProxyManagerDigitalOcean(ssh_key=VALID_SSH_KEY)
 
     @responses.activate
     def test_sizes_regions_populated(self, digitalocean_config):
@@ -622,7 +623,7 @@ class TestProxyManagerDigitalOceanInitExtra:
 
         with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get", side_effect=Exception("down")):
             with pytest.raises(ConnectionError, match="Error connecting to DigitalOcean"):
-                ProxyManagerDigitalOcean(ssh_key="test-key", token="tok", log=False)
+                ProxyManagerDigitalOcean(ssh_key=VALID_SSH_KEY, token="tok", log=False)
 
     def test_regions_http_error_raises_connection_error(self):
         from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
@@ -631,12 +632,12 @@ class TestProxyManagerDigitalOceanInitExtra:
         mock_resp.status_code = 500
         with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get", return_value=mock_resp):
             with pytest.raises(ConnectionError, match="Error connecting to DigitalOcean"):
-                ProxyManagerDigitalOcean(ssh_key="test-key", token="tok", log=False)
+                ProxyManagerDigitalOcean(ssh_key=VALID_SSH_KEY, token="tok", log=False)
 
     @responses.activate
     def test_reads_ssh_keys_from_file_path(self, tmp_path):
         key_file = tmp_path / "keys.txt"
-        key_file.write_text("test-key-1\ntest-key-2\n", encoding="utf-8")
+        key_file.write_text(f"{VALID_SSH_KEY}\n", encoding="utf-8")
 
         responses.add(
             responses.GET,
@@ -646,12 +647,10 @@ class TestProxyManagerDigitalOceanInitExtra:
         )
 
         with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get_or_create_project", return_value="proj-1"):
-            with patch("auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get_or_create_ssh_keys", return_value=[1, 2]) as mock_keys:
-                from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
-                mgr = ProxyManagerDigitalOcean(ssh_key=str(key_file), token="tok", log=False)
+            from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+            mgr = ProxyManagerDigitalOcean(ssh_key=str(key_file), token="tok", log=False)
 
-        assert mgr.ssh_keys == [1, 2]
-        assert mock_keys.call_args.args[0] == ["test-key-1", "test-key-2"]
+        assert mgr.ssh_keys == [VALID_SSH_KEY]
 
 
 class TestProxyManagerDigitalOceanGetProxyExtra:

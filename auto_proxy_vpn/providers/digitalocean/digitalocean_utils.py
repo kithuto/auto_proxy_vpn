@@ -127,7 +127,7 @@ def start_proxy(name: str,
                 region: str,
                 size: str,
                 port: int,
-                ssh_keys: list[int],
+                ssh_keys: list[str],
                 headers: dict[str, str],
                 regions: list[str],
                 logger: Optional[Logger],
@@ -154,8 +154,8 @@ def start_proxy(name: str,
         Droplet size slug.
     port : int
         Proxy port used in Squid configuration.
-    ssh_keys : list[int]
-        List of DigitalOcean SSH key IDs attached to the droplet.
+    ssh_keys : list[str]
+        List of SSH keys.
     headers : dict[str, str]
         Request headers including API authorization.
     regions : list[str]
@@ -189,14 +189,13 @@ def start_proxy(name: str,
         fallback remains).
     """
     
-    image_commands = get_squid_file(port, user, password, allowed_ips)
+    image_commands = get_squid_file(port, user, password, allowed_ips, ssh_keys=ssh_keys, os_user='root')
 
     data = {
         "name": name,
         "region": region,
         "size": size,
         "image": image,
-        "ssh_keys": ssh_keys,
         "tags": ["proxy"],
         "user_data": image_commands,
         "with_droplet_agent": False

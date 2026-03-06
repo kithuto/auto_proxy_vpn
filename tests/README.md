@@ -14,6 +14,9 @@ pytest
 # Run with a coverage report
 pytest --cov=auto_proxy_vpn --cov-report=html
 open htmlcov/index.html        # macOS
+
+# Report to terminal
+pytest --cov=auto_proxy_vpn --cov-report=term-missing
 ```
 
 ## Test Dependencies

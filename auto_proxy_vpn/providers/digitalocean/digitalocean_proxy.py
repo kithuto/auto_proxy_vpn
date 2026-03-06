@@ -12,7 +12,7 @@ from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
 from .digitalocean_utils import get_or_create_project, get_or_create_ssh_keys, get_servers_and_size, start_proxy, get_next_droplet_name
 from .digitalocean_exceptions import DropletNotProxyException
 from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
-from auto_proxy_vpn.utils.util import get_public_ip
+from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key
 from auto_proxy_vpn.utils.ssh_client import SSHClient
 
 class DigitalOceanProxy(BaseProxy):
@@ -241,6 +241,16 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
                 proxy.close()
         """
         
+        if isinstance(ssh_key, str) and isfile(ssh_key):
+            with open(ssh_key, "r") as f:
+                ssh_key = [x.strip('\n') for x in f.readlines() if x.strip('\n')]
+        try:
+            ssh_key = [ssh_key] if isinstance(ssh_key, str) or isinstance(ssh_key, dict) else ssh_key
+            self.ssh_keys: list[str] = [x if not isinstance(x, dict) else x['public_key'] for x in ssh_key if isinstance(x, dict) or (isinstance(x, str) and is_ssh_key(x))] 
+        except:
+            raise TypeError("Bad ssh_key. SSH in a dict must follow format: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}")
+        if not self.ssh_keys:
+            raise TypeError("No valid ssh keys found in the provided ssh_key parameter!")
         self.proxy_image = 'ubuntu-24-04-x64'
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
@@ -275,12 +285,6 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         
         # setting the project id
         self.project: str = get_or_create_project(project_name, project_description, self._headers)
-        
-        # set the ssh keys
-        if isinstance(ssh_key, str) and isfile(ssh_key):
-            with open(ssh_key, "r") as f:
-                ssh_key = [x.strip('\n') for x in f.readlines() if x.strip('\n')]
-        self.ssh_keys: list[int] = get_or_create_ssh_keys(ssh_key, self._headers)
     
     @classmethod
     def from_config(cls, config: DigitalOceanConfig | None = None, runtime_config: ManagerRuntimeConfig | None = None) -> 'ProxyManagerDigitalOcean':
@@ -375,7 +379,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             user_suffix = f" for the user {auth['user']}" if auth else " with no authentification"
             self.logger.info(f"Starting a new DigitalOcean proxy in the region {region}{user_suffix}...")
         
-        proxy_id, proxy_ip, error = start_proxy(proxy_name, self.proxy_image, region, proxy_size, port, self.ssh_keys, self._headers, servers, self.logger, allowed_ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async, retry) # type: ignore
+        proxy_id, proxy_ip, error = start_proxy(proxy_name, self.proxy_image, region, proxy_size, port, self.ssh_keys, self._headers, servers, self.logger, allowed_ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async, retry)
         
         active = not error
         if not proxy_id:
@@ -427,7 +431,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         droplet = droplets[0]
         public_ip = [x for x in droplet['networks']['v4'] if x['type'] == 'public'][0]['ip_address']
         
-        ssh_client = SSHClient(public_ip, 'root')
+        ssh_client = SSHClient(public_ip, user='ubuntu')
         _, proxy_file, _ = ssh_client.run_command('cat /etc/squid/squid.conf')
         if not proxy_file:
             raise ConnectionError("Can't connect to the proxy!")
