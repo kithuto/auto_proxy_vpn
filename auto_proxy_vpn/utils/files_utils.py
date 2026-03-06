@@ -1,7 +1,21 @@
 def get_ips_str(ips_list: list[str]):
     return "\n".join([f"acl custom_ips src {ip}" for ip in ips_list])
 
-def get_squid_file(port: int, user: str = '', password: str = "", allowed_ips: list[str] = []) -> str:
+def get_ssh_keys_str(ssh_keys: list[str], user: str):
+    keys = "\n".join(ssh_keys)
+    create_user = True if user == 'root' else False
+    if create_user:
+        user = 'ubuntu'
+    return f"""{f"\nuseradd -m -s /bin/bash -G sudo {user}" if create_user else ""}
+mkdir -p /home/{user}/.ssh
+chmod 700 /home/{user}/.ssh
+echo "{keys}" > /home/{user}/.ssh/authorized_keys
+
+chmod 600 /home/{user}/.ssh/authorized_keys
+chown -R {user}:{user} /home/{user}/.ssh
+"""
+
+def get_squid_file(port: int, user: str = '', password: str = "", allowed_ips: list[str] = [], ssh_keys: list[str] = [], os_user: str = '') -> str:
     allowed_ips_str = get_ips_str(allowed_ips)+'\nhttp_access allow custom_ips' if allowed_ips else ''
     auth_str = f"""#auth credentials: user: {user}, password: {password}
 auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwords
@@ -10,12 +24,16 @@ acl authenticated proxy_auth REQUIRED
 http_access allow authenticated
 {allowed_ips_str}
 http_access deny all""" if user else ("http_access allow all" if not allowed_ips else get_ips_str(allowed_ips)+"\nhttp_access allow custom_ips\nhttp_access deny all")
+
+    ssh_config = ""
+    if ssh_keys and os_user:
+        ssh_config = get_ssh_keys_str(ssh_keys, os_user)
     
     return f"""#!/bin/bash
 
 apt update
 apt install squid -y
-{f"htpasswd -b -c /etc/squid/passwords {user} {password}" if user else ""}
+{ssh_config}{f"htpasswd -b -c /etc/squid/passwords {user} {password}" if user else ""}
 touch /etc/squid/squid.conf
 
 echo "acl CONNECT method CONNECT
