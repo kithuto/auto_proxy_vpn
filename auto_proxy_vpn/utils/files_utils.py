@@ -4,9 +4,10 @@ def get_ips_str(ips_list: list[str]):
 def get_ssh_keys_str(ssh_keys: list[str], user: str):
     keys = "\n".join(ssh_keys)
     create_user = True if user == 'root' else False
+    create_user_str = f"\nuseradd -m -s /bin/bash -G sudo {user}" if create_user else ""
     if create_user:
         user = 'ubuntu'
-    return f"""{f"\nuseradd -m -s /bin/bash -G sudo {user}" if create_user else ""}
+    return f"""{create_user_str}
 mkdir -p /home/{user}/.ssh
 chmod 700 /home/{user}/.ssh
 echo "{keys}" > /home/{user}/.ssh/authorized_keys
