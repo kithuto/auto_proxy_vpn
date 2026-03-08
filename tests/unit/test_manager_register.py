@@ -50,3 +50,7 @@ class TestProxyManagersRegistry:
     def test_registry_maps_digitalocean(self):
         mgr = ProxyManagers.get_manager(CloudProvider.DIGITALOCEAN)
         assert mgr.__name__ == "ProxyManagerDigitalOcean"
+
+    def test_registry_maps_aws(self):
+        mgr = ProxyManagers.get_manager(CloudProvider.AWS)
+        assert mgr.__name__ == "ProxyManagerAws"

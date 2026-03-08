@@ -98,17 +98,15 @@ class DigitalOceanProxy(BaseProxy):
             raise ValueError("Bad on_exit option!")
         self.destroy = True if on_exit == 'destroy' else False
         
-        if not reload:
-            if not self.is_async and self.logger:
-                self.logger.info('Waitting for the proxy to be set up...')
-            self.active = self.is_active()
-            if self.logger:
+        if not self.is_async and self.logger and not reload:
+            self.logger.info('Waitting for the DigitalOcean proxy to be set up...')
+        self.active = self.is_active()
+        if self.logger:
+            if not reload:
                 proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
                 status = "and ready to use" if self.active else "but not active yet"
                 self.logger.info(f"New DigitalOcean proxy{proxy_suffix} created {status}.")
-        elif reload:
-            self.active = self.is_active()
-            if self.logger:
+            else:
                 proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
                 status = "active" if self.active else "inactive"
                 self.logger.info(f"DigitalOcean proxy{proxy_suffix} reloaded and {status}.")
@@ -289,8 +287,10 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
     @classmethod
     def from_config(cls, config: DigitalOceanConfig | None = None, runtime_config: ManagerRuntimeConfig | None = None) -> 'ProxyManagerDigitalOcean':
         """Create a ProxyManagerDigitalOcean instance from a DigitalOceanConfig object and a ManagerRuntimeConfig."""
-        if config is None or runtime_config is None:
+        if config is None:
             raise ValueError("DigitalOceanConfig must be provided to create a ProxyManagerDigitalOcean instance.")
+        if runtime_config is None:
+            runtime_config = ManagerRuntimeConfig()
         return cls(config.ssh_key, config.project_name, config.project_description, config.token, runtime_config.log, runtime_config.log_file, runtime_config.log_format, runtime_config.logger)
     
     def get_proxy(self,
@@ -379,13 +379,13 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             user_suffix = f" for the user {auth['user']}" if auth else " with no authentification"
             self.logger.info(f"Starting a new DigitalOcean proxy in the region {region}{user_suffix}...")
         
-        proxy_id, proxy_ip, error = start_proxy(proxy_name, self.proxy_image, region, proxy_size, port, self.ssh_keys, self._headers, servers, self.logger, allowed_ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async, retry)
+        proxy_id, proxy_ip, error = start_proxy(proxy_name, self.proxy_image, region, proxy_size, port, self.ssh_keys, self._headers, servers, self.logger, allowed_ips, auth.get('user', ''), auth.get('password', ''), is_async, retry)
         
         active = not error
         if not proxy_id:
             raise ConnectionError('Error creating the proxy in DigitalOcean.')
         
-        return DigitalOceanProxy(proxy_id, proxy_name, proxy_ip, port, region, self._token, active, is_async, auth['user'] if auth else '', auth['password'] if auth else '', self.logger, on_exit=on_exit)
+        return DigitalOceanProxy(proxy_id, proxy_name, proxy_ip, port, region, self._token, active, is_async, auth.get('user', ''), auth.get('password', ''), self.logger, on_exit=on_exit)
     
     def get_proxy_by_name(self, name: str, is_async: bool = False, on_exit: Literal['destroy', 'keep'] = 'destroy') -> DigitalOceanProxy:
         """Gets a proxy instance by droplet name.
@@ -431,7 +431,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         droplet = droplets[0]
         public_ip = [x for x in droplet['networks']['v4'] if x['type'] == 'public'][0]['ip_address']
         
-        ssh_client = SSHClient(public_ip, user='ubuntu')
+        ssh_client = SSHClient(public_ip, user='proxy-user')
         _, proxy_file, _ = ssh_client.run_command('cat /etc/squid/squid.conf')
         if not proxy_file:
             raise ConnectionError("Can't connect to the proxy!")

@@ -12,7 +12,7 @@ This package creates cloud VMs, installs Squid proxies on them via cloud-init, a
 
 ### Cloud API Credentials
 
-Config objects (`AzureConfig`, `DigitalOceanConfig`, `GoogleConfig`) accept API tokens and service account credentials. These can be passed directly or read from environment variables.
+Config objects (`AwsConfig`, `AzureConfig`, `DigitalOceanConfig`, `GoogleConfig`) accept API tokens and service account credentials. These can be passed directly or read from environment variables.
 
 - **Never hardcode credentials in your code.** Use `.env` files (added to `.gitignore`) or your provider's CLI auth.
 - Use the minimum required permissions for each provider.

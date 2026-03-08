@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from auto_proxy_vpn import CloudProvider
 from auto_proxy_vpn.configs import (
+    AwsConfig,
     AzureConfig,
     DigitalOceanConfig,
     GoogleConfig,
@@ -70,17 +71,17 @@ class TestGoogleConfig:
 
     def test_unique_key_uses_credentials(self, google_config):
         key = google_config.unique_key()
-        assert key == (CloudProvider.GOOGLE, "/tmp/fake_credentials.json")
+        assert key == (CloudProvider.GOOGLE, "test-gcp-project:/tmp/fake_credentials.json")
 
     def test_unique_key_falls_back_to_env_when_no_credentials(self):
         with patch.dict(environ, {"GOOGLE_APPLICATION_CREDENTIALS": "/env/path.json"}):
             cfg = GoogleConfig(project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
-            assert cfg.unique_key() == (CloudProvider.GOOGLE, "/env/path.json")
+            assert cfg.unique_key() == (CloudProvider.GOOGLE, "proj:/env/path.json")
 
     def test_unique_key_empty_when_no_credentials_and_no_env(self):
         with patch.dict(environ, {}, clear=True):
             cfg = GoogleConfig(project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
-            assert cfg.unique_key() == (CloudProvider.GOOGLE, "")
+            assert cfg.unique_key() == (CloudProvider.GOOGLE, "proj:")
 
 
 # ---------------------------------------------------------------------------
@@ -108,3 +109,33 @@ class TestAzureConfig:
         with patch.dict(environ, {}, clear=True):
             cfg = AzureConfig(credentials="", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
             assert cfg.unique_key() == (CloudProvider.AZURE, "")
+
+
+# ---------------------------------------------------------------------------
+# AwsConfig
+# ---------------------------------------------------------------------------
+
+class TestAwsConfig:
+    def test_provider_is_aws(self, aws_config):
+        assert aws_config.provider == CloudProvider.AWS
+
+    def test_unique_key_with_dict_credentials(self, aws_config):
+        key = aws_config.unique_key()
+        assert key == (CloudProvider.AWS, "fake-aws-access-key-id:fake-aws-secret-access-key")
+
+    def test_unique_key_falls_back_to_env(self):
+        with patch.dict(
+            environ,
+            {
+                "AWS_ACCESS_KEY_ID": "env-ak",
+                "AWS_SECRET_ACCESS_KEY": "env-sk",
+            },
+            clear=True,
+        ):
+            cfg = AwsConfig(ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...", credentials=None)
+            assert cfg.unique_key() == (CloudProvider.AWS, "env-ak:env-sk")
+
+    def test_unique_key_empty_when_no_credentials(self):
+        with patch.dict(environ, {}, clear=True):
+            cfg = AwsConfig(ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...", credentials=None)
+            assert cfg.unique_key() == (CloudProvider.AWS, ":")

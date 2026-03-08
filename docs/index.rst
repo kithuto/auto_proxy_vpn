@@ -16,6 +16,7 @@ On-demand proxies and VPNs across multiple cloud providers — from a single Pyt
    :maxdepth: 2
    :caption: Provider Guides
 
+   providers/aws
    providers/google
    providers/azure
    providers/digitalocean

@@ -76,6 +76,15 @@ class BaseProxy(ABC):
     def _stop_proxy(self, wait: bool = True):
         """
         Stops and kills the proxy. If the proxy is not asynchronous, it will wait until the proxy is fully removed.
+        
+        Parameters
+        ----------
+        wait : bool
+            Whether to wait until the proxy is fully removed when stopping it.
+            If the proxy is not asynchronous and wait is False, it will return
+            immediately without waiting for the proxy to be fully removed. For
+            asynchronous proxies, this parameter has no effect and the method
+            will never wait for the proxy to be fully removed before returning.
         """
         ...
     
@@ -365,7 +374,7 @@ class BaseProxyManager(ABC, Generic[T]):
         return self._sizes_regions[size]
     
     @abstractmethod
-    def get_running_proxy_names(self) -> list[str]:
+    def get_running_proxy_names(self) -> list[str] | list[tuple[str, str]]:
         """
         Get list of running proxy names
         """

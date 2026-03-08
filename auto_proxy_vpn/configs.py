@@ -56,4 +56,14 @@ class GoogleConfig(BaseConfig):
     credentials: str = ''
     
     def unique_key(self) -> tuple[CloudProvider, str]:
-        return (self.provider, self.credentials if self.credentials else environ.get("GOOGLE_APPLICATION_CREDENTIALS", ""))
+        return (self.provider, self.project+':'+(self.credentials if self.credentials else environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")))
+    
+@dataclass
+class AwsConfig(BaseConfig):
+    provider: ClassVar = CloudProvider.AWS
+    credentials: dict[str, str] | None = None
+    
+    def unique_key(self) -> tuple[CloudProvider, str]:
+        aws_access_key_id = self.credentials.get("AWS_ACCESS_KEY_ID", "") if self.credentials else environ.get("AWS_ACCESS_KEY_ID", "")
+        aws_secret_access_key = self.credentials.get("AWS_SECRET_ACCESS_KEY", "") if self.credentials else environ.get("AWS_SECRET_ACCESS_KEY", "")
+        return (self.provider, f"{aws_access_key_id}:{aws_secret_access_key}")

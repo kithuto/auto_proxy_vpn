@@ -105,17 +105,15 @@ class GoogleProxy(BaseProxy):
         self.destroy = True if on_exit == 'destroy' else False
         self.retried = False
         
-        if not reload or not self.ip:
-            if not self.is_async and self.logger:
-                self.logger.info('Waitting for the proxy to be set up...')
-            self.active = self.is_active()
-            if self.logger:
+        if not self.is_async and self.logger and not reload:
+            self.logger.info('Waitting for the Google proxy to be set up...')
+        self.active = self.is_active()
+        if self.logger:
+            if not reload:
                 proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
                 status = "and ready to use" if self.active else "but not active yet"
-                self.logger.info(f"New google proxy{proxy_suffix} created {status}.")
-        elif reload:
-            self.active = self.is_active()
-            if self.logger:
+                self.logger.info(f"New Google proxy{proxy_suffix} created {status}.")
+            else:
                 proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
                 status = "active" if self.active else "inactive"
                 self.logger.info(f"Google proxy{proxy_suffix} reloaded and {status}.")
@@ -342,8 +340,8 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             from google.api_core import exceptions as google_exceptions
             from google.oauth2 import service_account
         except:
-            raise ImportError("Install google-cloud-compute to use the google cloud proxies. "
-                              "python3 -m pip install google-cloud-compute")
+            raise ImportError("Install the required google packages to use the GoogleProxyManager:"
+                              "             python3 -m pip install auto_proxy_vpn[google]")
         
         credential = service_account.Credentials.from_service_account_file(credentials_file)
         
@@ -369,8 +367,10 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
     @classmethod
     def from_config(cls, config: GoogleConfig | None = None, runtime_config: ManagerRuntimeConfig | None = None) -> 'ProxyManagerGoogle':
         """Create a ProxyManagerGoogle instance from a GoogleConfig object and a ManagerRuntimeConfig."""
-        if config is None or runtime_config is None:
+        if config is None:
             raise ValueError("GoogleConfig must be provided to create a ProxyManagerGoogle instance.")
+        if runtime_config is None:
+            runtime_config = ManagerRuntimeConfig()
         return cls(config.ssh_key, config.project, config.credentials, runtime_config.log, runtime_config.log_file, runtime_config.log_format, runtime_config.logger)
     
     def get_proxy(self,
@@ -497,7 +497,7 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             user_suffix = f" for the user {auth['user']}" if auth else " with no authentification"
             self.logger.info(f"Starting a new google proxy in the zone {zone}{user_suffix}...")
         
-        proxy_ip, error = start_proxy(self, proxy_name, port, region, zone, [x for x in zones if x != zone], proxy_size, ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async)
+        proxy_ip, error = start_proxy(self, proxy_name, port, region, zone, [x for x in zones if x != zone], proxy_size, ips, auth.get('user', ''), auth.get('password', ''), is_async)
         if error and retry and random_region:
             if self.logger:
                 self.logger.warning(f"Failed to start the google proxy in the region {region}. Retrying in another region...")
@@ -505,19 +505,19 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             # retry with another random region, excluding the previous one
             region, zones = choice([x for x in servers if x[0] != region])
             zone = choice(zones)
-            proxy_ip, error = start_proxy(self, proxy_name, port, region, zone, [x for x in zones if x != zone], proxy_size, ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async, firewall=False)
+            proxy_ip, error = start_proxy(self, proxy_name, port, region, zone, [x for x in zones if x != zone], proxy_size, ips, auth.get('user', ''), auth.get('password', ''), is_async, firewall=False)
         
         if error:
             if self.logger:
                 self.logger.error("Failed to start the google proxy after retrying.")
             
-            # remove the instances created during the failed attempts to avoid leaving unused resources in the cloud
+            # remove the firewall created during the failed attempts to avoid leaving unused resources in the cloud
             request = self._compute_v1.DeleteFirewallRequest(firewall=f'{proxy_name}-firewall', project=self.project)
             _ = self._firewall_client.delete(request=request)
             
             raise Exception("Failed to start the google proxy instance.")
         
-        return GoogleProxy(self, proxy_name, proxy_ip, port, self.project, region, zone, proxy_size, is_async=is_async, user=auth['user'] if auth else '', password=auth['password'] if auth else '', logger=self.logger, on_exit=on_exit)
+        return GoogleProxy(self, proxy_name, proxy_ip, port, self.project, region, zone, proxy_size, is_async=is_async, user=auth.get('user', ''), password=auth.get('password', ''), logger=self.logger, on_exit=on_exit)
     
     def get_proxy_by_name(self, name: str, is_async: bool = False, on_exit: Literal['destroy', 'keep'] = 'destroy') -> GoogleProxy:
         """Load an existing Google Cloud proxy instance by its name.

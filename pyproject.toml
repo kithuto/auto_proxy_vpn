@@ -41,6 +41,7 @@ azure = [
     "azure-mgmt-network",
     "azure-mgmt-compute",
 ]
+aws = ["boto3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -49,7 +50,8 @@ markers = [
     "integration: Integration tests requiring real cloud credentials (skipped by default)",
     "digitalocean: Tests requiring a DigitalOcean token",
     "google: Tests requiring Google Cloud credentials",
-    "azure: Tests requiring Azure credentials"
+    "azure: Tests requiring Azure credentials",
+    "aws: Tests requiring AWS credentials"
 ]
 addopts = [
     "-v",

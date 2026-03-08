@@ -94,19 +94,16 @@ class AzureProxy(BaseProxy):
         if on_exit not in ['keep', 'destroy']:
             raise ValueError("Bad on_exit option!")
         self.destroy = True if on_exit == 'destroy' else False
-        self.retried = False
         
-        if not reload or not self.ip:
-            if not self.is_async and self.logger:
-                self.logger.info('Waitting for the azure proxy to be set up...')
-            self.active = self.is_active()
-            if self.logger:
+        if not self.is_async and self.logger and not reload:
+            self.logger.info('Waitting for the Azure proxy to be set up...')
+        self.active = self.is_active()
+        if self.logger:
+            if not reload:
                 proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
                 status = "and ready to use" if self.active else "but not active yet"
-                self.logger.info(f"New azure proxy{proxy_suffix} created {status}.")
-        elif reload:
-            self.active = self.is_active()
-            if self.logger:
+                self.logger.info(f"New Azure proxy{proxy_suffix} created {status}.")
+            else:
                 proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
                 status = "active" if self.active else "inactive"
                 self.logger.info(f"Azure proxy{proxy_suffix} reloaded and {status}.")
@@ -298,8 +295,8 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             azure_logs = getLogger("azure")
             azure_logs.setLevel(ERROR)
         except:
-            raise ImportError("Install azure-identity and azure-mgmt packages to use the azure proxies.\n"
-                              "             python3 -m pip install azure-identity azure-mgmt-subscription azure-mgmt-resource azure-mgmt-network azure-mgmt-compute")
+            raise ImportError("Install the required azure packages to use the AzureProxyManager:"
+                              "             python3 -m pip install auto_proxy_vpn[azure]")
         
         if isinstance(credentials, dict) and "AZURE_TENANT_ID" in credentials:
             credential = ClientSecretCredential(
@@ -340,8 +337,10 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
     @classmethod
     def from_config(cls, config: AzureConfig | None = None, runtime_config: ManagerRuntimeConfig | None = None) -> 'ProxyManagerAzure':
         """Create a ProxyManagerAzure instance from an AzureConfig object and a ManagerRuntimeConfig."""
-        if config is None or runtime_config is None:
+        if config is None:
             raise ValueError("AzureConfig must be provided to create a ProxyManagerAzure instance.")
+        if runtime_config is None:
+            runtime_config = ManagerRuntimeConfig()
         return cls(config.ssh_key, config.credentials, runtime_config.log, runtime_config.log_file, runtime_config.log_format, runtime_config.logger)
     
     def get_proxy(self,
@@ -458,7 +457,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             else:
                 ips = allowed_ips
             
-            if not all(search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?', ip) for ip in allowed_ips):
+            if not all(search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?', ip) for ip in ips):
                 raise TypeError("IPs or ranges of ips with bad format!")
         
         if ip not in ips:
@@ -468,14 +467,14 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             user_suffix = f" for the user {auth['user']}" if auth else " with no authentification"
             self.logger.info(f"Starting a new azure proxy in the region {region}{user_suffix}...")
         
-        proxy_ip, error = start_proxy(self, proxy_name, port, region, proxy_size, ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async)
+        proxy_ip, error = start_proxy(self, proxy_name, port, region, proxy_size, ips, auth.get('user', ''), auth.get('password', ''), is_async)
         if error and retry and random_region:
             if self.logger:
                 self.logger.warning(f"Failed to start the azure proxy {proxy_name} in the region {region}. Retrying with a different region...")
             
             # retry with another random region, excluding the previous one
             region = choice([x for x in servers if x != region])
-            proxy_ip, error = start_proxy(self, proxy_name, port, region, proxy_size, ips, auth['user'] if auth else '', auth['password'] if auth else '', is_async)
+            proxy_ip, error = start_proxy(self, proxy_name, port, region, proxy_size, ips, auth.get('user', ''), auth.get('password', ''), is_async)
         
         if error:
             # if it fails again, we try to delete the resource group just in case it was created and then raise an exception
@@ -486,7 +485,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             finally:
                 raise Exception(f"Failed to start the azure proxy {proxy_name}, no public IP obtained.")
         
-        return AzureProxy(self, proxy_name, proxy_ip, port, region, proxy_size, ips, is_async=is_async, user=auth['user'] if auth else '', password=auth['password'] if auth else '', logger=self.logger, reload=False, on_exit=on_exit)
+        return AzureProxy(self, proxy_name, proxy_ip, port, region, proxy_size, ips, is_async=is_async, user=auth.get('user', ''), password=auth.get('password', ''), logger=self.logger, reload=False, on_exit=on_exit)
     
     def get_proxy_by_name(self, name: str, is_async: bool = False, on_exit: Literal['destroy', 'keep'] = 'destroy') -> AzureProxy:
         """Reload an existing Azure proxy instance by its name.
@@ -527,7 +526,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
         """
         
         if not name in self.get_running_proxy_names():
-            raise NameError(f"No proxy with the name {name} was found!")
+            raise NameError(f"No proxy with the name {name} has been found in Azure!")
         
         instance = self._compute_client.virtual_machines.get(name, name)
         
@@ -539,15 +538,15 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
         ssh_client = SSHClient(ip, 'proxy-user')
         _, startup_script, _ = ssh_client.run_command('cat /etc/squid/squid.conf')
         if not startup_script:
-            raise ConnectionError("Can't connect to the proxy!")
+            raise ConnectionError("Can't connect to the azure proxy!")
         
         try:
             port = int(search(r'http_port (\d+)', startup_script).group(1)) # type: ignore
         except:
-            raise ValueError("Can't find the proxy port in the startup script of the instance!")
+            raise ValueError("Can't find the proxy port in the startup script of the Azure instance!")
         
         if not instance.hardware_profile or not instance.hardware_profile.vm_size:
-            raise ValueError("Can't find the proxy instance type in the azure instance information!")
+            raise ValueError("Can't find the proxy instance type in the Azure instance information!")
         vm_size = instance.hardware_profile.vm_size
         
         # Search IPs in the squid config file to get the allowed ips for the proxy
