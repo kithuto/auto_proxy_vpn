@@ -40,7 +40,7 @@ tests/
 │   ├── test_configs.py               # Config dataclasses & validation
 │   ├── test_manager_register.py      # ProxyManagers registry
 │   ├── test_base_proxy.py            # BaseProxy, ProxyBatch, BaseProxyManager
-│   ├── test_proxy_pool.py            # ProxyPool & RandomManagerPicker
+│   ├── test_proxy_pool.py            # ProxyPool, RandomManagerPicker, regions, running names
 │   ├── test_utils.py                 # Public IP detection, SSH, exceptions
 │   ├── test_digitalocean_proxy.py    # DigitalOcean provider (mocked HTTP)
 │   ├── test_digitalocean_utils.py    # DigitalOcean utility functions
@@ -49,6 +49,7 @@ tests/
 │   ├── test_aws_proxy.py             # AWS provider (mocked SDK)
 │   └── test_aws_utils.py             # AWS utility functions
 └── integration/                      # Real cloud tests — slow, needs creds
+    ├── test_proxy_pool_real.py       # ProxyPool end-to-end with available real provider creds
     ├── test_digitalocean_real.py
     ├── test_google_real.py
     ├── test_azure_real.py
@@ -108,6 +109,7 @@ pytest -m "integration and digitalocean"
 Unit tests are the backbone of the test suite. They run in milliseconds, require no cloud credentials, and cover:
 
 - **Core** — config dataclasses, the `ProxyManagers` registry, `ProxyPool`, `RandomManagerPicker`.
+- **ProxyPool details** — account-aware `get_running_proxy_names()`, provider region helpers, and batch distribution.
 - **Base classes** — `BaseProxy`, `ProxyBatch`, `BaseProxyManager` (using `StubProxy` / `StubProxyManager`).
 - **Providers** — each provider is tested with its external SDK or HTTP API fully mocked.
 
@@ -218,6 +220,9 @@ with patch.dict("sys.modules", {
 
 Integration tests create **real cloud resources** and are skipped unless the required environment variables are set.
 
+All integration tests call `load_dotenv(...)` and load variables from a `.env` file
+at the repository root when present.
+
 ```{warning}
 Integration tests create real cloud resources that **cost money**. They
 include cleanup logic in `finally` blocks, but always verify resources
@@ -230,8 +235,8 @@ are destroyed after a run.
 
 ```bash
 export DIGITALOCEAN_API_TOKEN="dop_v1_..."
-export DO_SSH_KEY_NAME="my-ssh-key"
-pytest -m "integration and digitalocean"
+export SSH_KEY="ssh-rsa AAAA..."
+pytest -m integration -k digitalocean
 ```
 
 #### Google Cloud
@@ -239,8 +244,8 @@ pytest -m "integration and digitalocean"
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
 export GOOGLE_PROJECT="my-project-id"
-export GOOGLE_SSH_KEY="ssh-rsa AAAA..."
-pytest -m "integration and google"
+export SSH_KEY="ssh-rsa AAAA..."
+pytest -m integration -k google
 ```
 
 #### Azure
@@ -250,8 +255,8 @@ export AZURE_SUBSCRIPTION_ID="..."
 export AZURE_TENANT_ID="..."
 export AZURE_CLIENT_ID="..."
 export AZURE_CLIENT_SECRET="..."
-export AZURE_SSH_KEY="ssh-rsa AAAA..."
-pytest -m "integration and azure"
+export SSH_KEY="ssh-rsa AAAA..."
+pytest -m integration -k azure
 ```
 
 #### AWS
@@ -259,8 +264,8 @@ pytest -m "integration and azure"
 ```bash
 export AWS_ACCESS_KEY_ID="AKIA..."
 export AWS_SECRET_ACCESS_KEY="..."
-export AWS_SSH_KEY="ssh-rsa AAAA..."
-pytest -m "integration and aws"
+export SSH_KEY="ssh-rsa AAAA..."
+pytest -m integration -k aws
 ```
 
 ---
@@ -304,18 +309,15 @@ To enable integration tests in CI, configure these repository secrets under **Se
 | Secret                             | Provider      |
 |------------------------------------|---------------|
 | `DIGITALOCEAN_API_TOKEN`           | DigitalOcean  |
-| `DO_SSH_KEY_NAME`                  | DigitalOcean  |
+| `SSH_KEY`                          | DigitalOcean, Google Cloud, Azure, AWS |
 | `GOOGLE_APPLICATION_CREDENTIALS`   | Google Cloud  |
 | `GOOGLE_PROJECT`                   | Google Cloud  |
-| `GOOGLE_SSH_KEY`                   | Google Cloud  |
 | `AZURE_SUBSCRIPTION_ID`            | Azure         |
 | `AZURE_TENANT_ID`                  | Azure         |
 | `AZURE_CLIENT_ID`                  | Azure         |
 | `AZURE_CLIENT_SECRET`              | Azure         |
-| `AZURE_SSH_KEY`                    | Azure         |
 | `AWS_ACCESS_KEY_ID`                | AWS           |
 | `AWS_SECRET_ACCESS_KEY`            | AWS           |
-| `AWS_SSH_KEY`                      | AWS           |
 
 ---
 

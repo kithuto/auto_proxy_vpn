@@ -5,7 +5,7 @@ environment variables:
 
 - ``AWS_ACCESS_KEY_ID``
 - ``AWS_SECRET_ACCESS_KEY``
-- ``AWS_SSH_KEY`` — public SSH key string
+- ``SSH_KEY`` — public SSH key string
 
 Run with::
 
@@ -17,6 +17,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
+
 import pytest
 from dotenv import load_dotenv
 
@@ -27,11 +29,11 @@ pytestmark = [pytest.mark.integration, pytest.mark.aws]
 
 AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
-AWS_SSH_KEY = os.environ.get("AWS_SSH_KEY", "")
+SSH_KEY = os.environ.get("SSH_KEY", "")
 
-skip_reason = "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_SSH_KEY must be set"
+skip_reason = "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and SSH_KEY must be set"
 skip_if_no_creds = pytest.mark.skipif(
-    not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY or not AWS_SSH_KEY,
+    not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY or not SSH_KEY,
     reason=skip_reason,
 )
 
@@ -42,10 +44,8 @@ class TestAwsIntegration:
 
     @pytest.fixture(scope="class")
     def manager(self):
-        from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
-
         return ProxyManagerAws(
-            ssh_key=AWS_SSH_KEY,
+            ssh_key=SSH_KEY,
             credentials={
                 "AWS_ACCESS_KEY_ID": AWS_ACCESS_KEY_ID,
                 "AWS_SECRET_ACCESS_KEY": AWS_SECRET_ACCESS_KEY,
@@ -53,12 +53,12 @@ class TestAwsIntegration:
             log=False,
         )
 
-    def test_sizes_and_regions(self, manager):
+    def test_sizes_and_regions(self, manager: ProxyManagerAws):
         sr = manager.get_sizes_and_regions()
         assert "small" in sr
         assert len(sr["small"]) > 0
 
-    def test_create_and_destroy_proxy(self, manager):
+    def test_create_and_destroy_proxy(self, manager: ProxyManagerAws):
         proxy = manager.get_proxy(
             size="small",
             is_async=False,
@@ -72,35 +72,24 @@ class TestAwsIntegration:
             proxy.close()
             assert proxy.stopped
 
-    def test_create_async_proxy(self, manager):
-        proxy = manager.get_proxy(
-            size="small",
-            is_async=True,
-            on_exit="destroy",
-        )
-        proxy.is_active(wait=True)
-        try:
+    def test_create_batch_via_pool(self, manager: ProxyManagerAws):
+        batch = manager.get_proxies(2, sizes="small", on_exit="destroy")
+        
+        for proxy in batch:
+            assert proxy.is_active(wait=True)
+            assert proxy.ip
             assert proxy.port > 0
-        finally:
-            proxy.close()
-
-    def test_get_running_proxy_names(self, manager):
+        
         names = manager.get_running_proxy_names()
         assert isinstance(names, list)
-
-    def test_create_batch_via_pool(self):
-        from auto_proxy_vpn import AwsConfig, ProxyPool
-
-        config = AwsConfig(
-            ssh_key=AWS_SSH_KEY,
-            credentials={
-                "AWS_ACCESS_KEY_ID": AWS_ACCESS_KEY_ID,
-                "AWS_SECRET_ACCESS_KEY": AWS_SECRET_ACCESS_KEY,
-            },
-        )
-        pool = ProxyPool(config, log=False)
-        batch = pool.create_batch(2, sizes="small", is_async=True, on_exit="destroy")
         try:
-            assert len(batch) == 2
+            assert len(batch) == len(names) == 2
         finally:
-            batch.close()
+            batch.close(wait=True)
+
+    def test_all_proxies_cleaned_up(self, manager: ProxyManagerAws):
+        # This test assumes that the previous tests have run and created proxies.
+        # It checks that all proxies are properly cleaned up after tests.
+        names = manager.get_running_proxy_names()
+        assert isinstance(names, list)
+        assert len(names) == 0, f"Expected no running proxies, but found: {names}"

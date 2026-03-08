@@ -195,10 +195,13 @@ class GoogleProxy(BaseProxy):
             return
         
         if self.destroy:
-            request = self.manager._compute_v1.DeleteFirewallRequest(firewall=f'{self.name}-firewall', project=self.project)
-            response = self.manager._firewall_client.delete(request=request)
-            if not self.is_async and wait:
-                _ = wait_for_extended_operation(response)
+            try:
+                request = self.manager._compute_v1.DeleteFirewallRequest(firewall=f'{self.name}-firewall', project=self.project)
+                response = self.manager._firewall_client.delete(request=request)
+                if not self.is_async and wait:
+                    _ = wait_for_extended_operation(response)
+            except:
+                pass
             
             try:
                 request = self.manager._compute_v1.DeleteInstanceRequest(instance=self.name, project=self.project, zone=self.zone)

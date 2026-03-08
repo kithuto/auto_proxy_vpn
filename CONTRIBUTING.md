@@ -220,6 +220,7 @@ The key methods you need to implement:
 |---|---|
 | `from_config(cls, config, runtime_config)` | Build the manager from config objects |
 | `get_proxy(...)` | Create and return a single proxy |
+| `get_proxies(...)` | Create multiple proxies and return a `ProxyBatch` |
 | `get_proxy_by_name(name, ...)` | Reload an existing proxy by name |
 | `get_running_proxy_names()` | List all active proxy names |
 

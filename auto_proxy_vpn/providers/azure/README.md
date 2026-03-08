@@ -196,6 +196,14 @@ finally:
 
 Factory class that provisions and manages Azure proxy VMs.
 
+**VM sizes:**
+
+| Size | Azure SKU |
+|---|---|
+| `small` | `Standard_B1s` |
+| `medium` | `Standard_B1ms` |
+| `large` | `Standard_B2s` |
+
 ```python
 ProxyManagerAzure(
     ssh_key,                # str | dict | list — SSH public key(s) or path to key file
@@ -225,13 +233,22 @@ proxy = manager.get_proxy(
 )
 ```
 
-**VM sizes:**
+#### `manager.get_proxies()`
 
-| Size | Azure SKU |
-|---|---|
-| `small` | `Standard_B1s` |
-| `medium` | `Standard_B1ms` |
-| `large` | `Standard_B2s` |
+Create multiple proxies in one call and return a `ProxyBatch`.
+
+```python
+batch = manager.get_proxies(
+    number=3,
+    sizes=["small", "medium", "large"],
+    is_async=True,
+)
+
+for proxy in batch:
+    print(proxy.get_proxy_str())
+
+batch.close()
+```
 
 #### `manager.get_proxy_by_name()`
 
