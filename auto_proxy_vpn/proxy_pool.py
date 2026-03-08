@@ -156,6 +156,7 @@ class ProxyPool:
         """
         
         # all the managers will always share the same logger
+        self.logger = logger
         if log and not logger:
             basicConfig(filename=log_file,
                     format=log_format,
@@ -166,7 +167,7 @@ class ProxyPool:
         
         for provider_config in provider_configs:
             manager_cls = ProxyManagers.get_manager(provider_config.provider)
-            runtime_config = ManagerRuntimeConfig(log=log, logger=logger)
+            runtime_config = ManagerRuntimeConfig(log=log, logger=self.logger)
             manager = manager_cls.from_config(provider_config, runtime_config)
             self.managers.append(manager)
     
