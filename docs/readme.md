@@ -11,6 +11,7 @@ Each provider has its own README with step-by-step credential setup, full API re
 
 | Provider | Guide |
 |---|---|
+| AWS | [AWS docs](providers/aws.md) |
 | Google Cloud | [Google docs](providers/google.md) |
 | Azure | [Azure docs](providers/azure.md) |
 | DigitalOcean | [DigitalOcean docs](providers/digitalocean.md) |

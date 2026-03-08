@@ -6,7 +6,7 @@ class CloudProvider(str, Enum):
     GOOGLE = "google"
     AZURE = "azure"
     DIGITALOCEAN = "digitalocean"
-    # AWS = "aws"
+    AWS = "aws"
     # ALIBABA = "alibaba"
     # ORACLE = "oracle"
 
@@ -22,5 +22,6 @@ __all__ = [
     'GoogleConfig',
     'AzureConfig',
     'DigitalOceanConfig',
+    'AwsConfig',
     'ProxyPool'
     ]

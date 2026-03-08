@@ -66,6 +66,7 @@ pip install google-cloud-compute                          # Google Cloud
 pip install azure-identity azure-mgmt-subscription \
             azure-mgmt-resource azure-mgmt-network \
             azure-mgmt-compute                            # Azure
+pip install boto3                                         # AWS
 # DigitalOcean — no extra packages needed
 
 # 5. Create a branch
@@ -88,7 +89,7 @@ auto_proxy_vpn/
 │   ├── azure/               # Azure provider
 │   ├── digitalocean/        # DigitalOcean provider
 │   ├── google/              # Google Cloud provider
-│   ├── aws/                 # (planned)
+│   ├── aws/                 # AWS provider
 │   ├── alibaba/             # (planned)
 │   └── oracle/              # (planned)
 └── utils/
@@ -193,6 +194,7 @@ class CloudProvider(str, Enum):
     GOOGLE = "google"
     AZURE = "azure"
     DIGITALOCEAN = "digitalocean"
+    AWS = "aws"
     YOUR_PROVIDER = "your_provider"      # ← must match the package name
 ```
 
@@ -316,6 +318,7 @@ docs/
 ├── contributing.md       # Includes ../CONTRIBUTING.md
 ├── security.md          # Includes ../SECURITY.md
 ├── providers/
+│   ├── aws.md           # Includes AWS provider README
 │   ├── google.md        # Includes Google provider README
 │   ├── azure.md         # Includes Azure provider README
 │   └── digitalocean.md  # Includes DigitalOcean provider README

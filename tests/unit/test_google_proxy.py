@@ -283,7 +283,7 @@ class TestProxyManagerGoogleInit:
 
         with patch("builtins.__import__", side_effect=_fake_import):
             from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
-            with pytest.raises(ImportError, match="google-cloud-compute"):
+            with pytest.raises(ImportError, match=r"auto_proxy_vpn\[google\]"):
                 ProxyManagerGoogle(
                     ssh_key="ssh-rsa AAAA...",
                     project="test-project",

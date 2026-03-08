@@ -99,7 +99,7 @@ venv.bak/
 dmypy.json
 
 # docs
-# docs/_build/
+docs/_build/
 
 .env
 *.json

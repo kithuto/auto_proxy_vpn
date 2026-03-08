@@ -15,15 +15,11 @@ Contributing
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Literal
-from unittest.mock import MagicMock, PropertyMock, patch
-
 import pytest
 
 from auto_proxy_vpn.configs import (
+    AwsConfig,
     AzureConfig,
-    BaseConfig,
     DigitalOceanConfig,
     GoogleConfig,
     ManagerRuntimeConfig,
@@ -147,6 +143,17 @@ def azure_config():
     return AzureConfig(
         ssh_key="ssh-rsa AAAA...",
         credentials="fake-subscription-id",
+    )
+
+
+@pytest.fixture
+def aws_config():
+    return AwsConfig(
+        ssh_key="ssh-rsa AAAA...",
+        credentials={
+            "AWS_ACCESS_KEY_ID": "fake-aws-access-key-id",
+            "AWS_SECRET_ACCESS_KEY": "fake-aws-secret-access-key",
+        },
     )
 
 

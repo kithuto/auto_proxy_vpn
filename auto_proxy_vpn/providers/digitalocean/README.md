@@ -119,7 +119,7 @@ Factory class that provisions and manages DigitalOcean proxy droplets.
 
 ```python
 ProxyManagerDigitalOcean(
-    ssh_key,                    # str | dict | list — key name, public key dict, or path to key file
+    ssh_key,                    # str | dict | list — ssh key, public key dict, or path to key file
     project_name="AutoProxyVPN",# str — DO project to group proxies under
     project_description="On demand proxies",
     token="",                   # str — API token (empty = env var DIGITALOCEAN_API_TOKEN)
@@ -134,7 +134,7 @@ ProxyManagerDigitalOcean(
 
 | Format | Example |
 |---|---|
-| Existing key name | `"my-key"` |
+| ssh key | `"ssh-rsa AAAA..."` |
 | New key dict | `{"name": "my-key", "public_key": "ssh-rsa AAAA..."}` |
 | Mixed list | `["my-key", {"name": "other", "public_key": "ssh-rsa ..."}]` |
 | File path | `"/path/to/authorized_keys"` (one public key per line) |
@@ -281,6 +281,6 @@ if proxy.is_active(wait=True):
 Only accepts already existent digitalocean key names
 ```python
 manager = ProxyManagerDigitalOcean(
-    ssh_key="/path/to/do_keys",  # one public key name per line
+    ssh_key="/path/to/do_keys",  # one public ssh key per line
 )
 ```

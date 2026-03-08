@@ -270,7 +270,7 @@ class TestProxyManagerAzureInit:
             return original_import(name, *args, **kwargs)
 
         with patch("builtins.__import__", side_effect=_import_mock):
-            with pytest.raises(ImportError, match="Install azure-identity"):
+            with pytest.raises(ImportError, match=r"auto_proxy_vpn\[azure\]"):
                 ProxyManagerAzure(ssh_key=VALID_SSH_KEY, credentials="fake-sub-id", log=False)
 
     def test_logger_config_and_client_secret_credentials_dict(self):
@@ -490,17 +490,23 @@ class TestProxyManagerAzureGetProxy:
         assert start_mock.call_args.args[5] == ["8.8.8.8", "1.2.3.4"]
         assert mgr.logger.info.called
 
-    def test_get_proxy_allowed_ips_string_currently_raises_type_error(self):
+    def test_get_proxy_allowed_ips_string_is_accepted(self):
         mgr, sdk = _build_azure_manager()
         sdk["resource_client"].resource_groups.list.return_value = []
 
         with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
-            with pytest.raises(TypeError, match="bad format"):
-                mgr.get_proxy(
+            with patch(
+                "auto_proxy_vpn.providers.azure.azure_proxy.start_proxy",
+                return_value=("40.0.0.71", False),
+            ) as start_mock:
+                proxy = mgr.get_proxy(
                     size="small",
                     allowed_ips="8.8.8.8",
                     is_async=True,
                 )
+
+        assert proxy.ip == "40.0.0.71"
+        assert start_mock.call_args.args[5] == ["8.8.8.8", "1.2.3.4"]
 
     def test_get_proxy_retry_logs_warning(self):
         mgr, sdk = _build_azure_manager()

@@ -45,11 +45,14 @@ tests/
 │   ├── test_digitalocean_proxy.py    # DigitalOcean provider (mocked HTTP)
 │   ├── test_digitalocean_utils.py    # DigitalOcean utility functions
 │   ├── test_google_proxy.py          # Google Cloud provider (mocked SDK)
-│   └── test_azure_proxy.py          # Azure provider (mocked SDK)
+│   ├── test_azure_proxy.py           # Azure provider (mocked SDK)
+│   ├── test_aws_proxy.py             # AWS provider (mocked SDK)
+│   └── test_aws_utils.py             # AWS utility functions
 └── integration/                      # Real cloud tests — slow, needs creds
     ├── test_digitalocean_real.py
     ├── test_google_real.py
-    └── test_azure_real.py
+    ├── test_azure_real.py
+    └── test_aws_real.py
 ```
 
 ### Shared Fixtures
@@ -66,6 +69,7 @@ tests/
 | `digitalocean_config`       | `DigitalOceanConfig` fixture with fake credentials       |
 | `google_config`             | `GoogleConfig` fixture with fake credentials             |
 | `azure_config`              | `AzureConfig` fixture with fake credentials              |
+| `aws_config`                | `AwsConfig` fixture with fake credentials                |
 | `make_do_regions_response()`| Builds a mock DigitalOcean `/v2/regions` response        |
 | `make_do_droplet()`         | Builds a mock DigitalOcean droplet payload               |
 
@@ -82,7 +86,7 @@ Pytest markers control which tests run. They are defined in `pyproject.toml`:
 | `digitalocean`  | Requires a DigitalOcean API token            |
 | `google`        | Requires Google Cloud credentials            |
 | `azure`         | Requires Azure credentials                   |
-| `slow`          | Tests that take a long time to run           |
+| `aws`           | Requires AWS credentials                     |
 
 ### Filtering by marker
 
@@ -95,9 +99,6 @@ pytest -m integration
 
 # DigitalOcean integration tests only
 pytest -m "integration and digitalocean"
-
-# Exclude slow tests
-pytest -m "not slow"
 ```
 
 ---
@@ -169,6 +170,39 @@ one.
 
 Azure uses multiple `azure-mgmt-*` SDKs. The approach is the same as Google — mock the module hierarchy via `sys.modules` and wire parent → child attributes.
 
+#### AWS
+
+AWS unit tests mock the SDK surface used by the provider (`boto3` and `botocore.exceptions`) instead of making real EC2 calls. The common pattern is:
+
+1. Build a fake SDK with `MagicMock` (`client()`, `resource()`, `describe_regions()`, `create_instances()`, etc.).
+2. Patch imports with `patch.dict("sys.modules", ...)` so `ProxyManagerAws` loads the mocked modules.
+3. Validate behavior by asserting calls and side effects (for example, security-group cleanup on errors).
+
+```python
+from unittest.mock import MagicMock, patch
+
+boto3_mock = MagicMock()
+client = MagicMock()
+resource = MagicMock()
+
+client.describe_regions.return_value = {
+    "Regions": [{"RegionName": "us-east-1"}]
+}
+boto3_mock.client.return_value = client
+boto3_mock.resource.return_value = resource
+
+class MockClientError(Exception):
+    def __init__(self, code: str):
+        self.response = {"Error": {"Code": code}}
+
+with patch.dict("sys.modules", {
+    "boto3": boto3_mock,
+    "botocore": MagicMock(),
+    "botocore.exceptions": MagicMock(ClientError=MockClientError),
+}):
+    from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
+```
+
 ### Common Pitfalls
 
 | Pitfall | Solution |
@@ -218,6 +252,15 @@ export AZURE_CLIENT_ID="..."
 export AZURE_CLIENT_SECRET="..."
 export AZURE_SSH_KEY="ssh-rsa AAAA..."
 pytest -m "integration and azure"
+```
+
+#### AWS
+
+```bash
+export AWS_ACCESS_KEY_ID="AKIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_SSH_KEY="ssh-rsa AAAA..."
+pytest -m "integration and aws"
 ```
 
 ---
@@ -270,6 +313,9 @@ To enable integration tests in CI, configure these repository secrets under **Se
 | `AZURE_CLIENT_ID`                  | Azure         |
 | `AZURE_CLIENT_SECRET`              | Azure         |
 | `AZURE_SSH_KEY`                    | Azure         |
+| `AWS_ACCESS_KEY_ID`                | AWS           |
+| `AWS_SECRET_ACCESS_KEY`            | AWS           |
+| `AWS_SSH_KEY`                      | AWS           |
 
 ---
 

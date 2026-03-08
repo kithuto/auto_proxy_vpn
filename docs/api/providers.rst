@@ -1,6 +1,20 @@
 Providers
 =========
 
+AWS
+---
+
+.. automodule:: auto_proxy_vpn.providers.aws.aws_proxy
+   :members:
+   :show-inheritance:
+
+.. automodule:: auto_proxy_vpn.providers.aws.aws_utils
+   :members:
+
+.. automodule:: auto_proxy_vpn.providers.aws.aws_exceptions
+   :members:
+   :show-inheritance:
+
 Google Cloud
 ------------
 

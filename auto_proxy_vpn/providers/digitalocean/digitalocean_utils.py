@@ -189,7 +189,7 @@ def start_proxy(name: str,
         fallback remains).
     """
     
-    image_commands = get_squid_file(port, user, password, allowed_ips, ssh_keys=ssh_keys, os_user='root')
+    image_commands = get_squid_file(port, user, password, allowed_ips, ssh_keys=ssh_keys)
 
     data = {
         "name": name,

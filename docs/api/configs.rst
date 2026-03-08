@@ -32,3 +32,9 @@ DigitalOceanConfig
 
 .. autoclass:: auto_proxy_vpn.configs.DigitalOceanConfig
    :members:
+
+AwsConfig
+---------
+
+.. autoclass:: auto_proxy_vpn.configs.AwsConfig
+   :members:

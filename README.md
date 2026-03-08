@@ -24,7 +24,7 @@
 
 **Key features:**
 
-- **Multi-cloud** — spin up proxies on Google Cloud, Azure, or DigitalOcean with the same API.
+- **Multi-cloud** — spin up proxies on AWS, Google Cloud, Azure, or DigitalOcean with the same API.
 - **Zero infrastructure** — no pre-existing VMs, containers, or images required.
 - **Context manager support** — resources are created on entry and destroyed on exit.
 - **Proxy Pool** — distribute proxy creation across multiple providers with a single call.
@@ -74,11 +74,12 @@ Then install provider-specific optional dependencies (extras):
 | **DigitalOcean** | *(none — uses `requests`, already included)* |
 | **Google Cloud** | `pip install auto_proxy_vpn[google]` |
 | **Azure** | `pip install auto_proxy_vpn[azure]` |
+| **AWS** | `pip install auto_proxy_vpn[aws]` |
 
 Install multiple extras together if needed:
 
 ```bash
-pip install auto_proxy_vpn[google,azure]
+pip install auto_proxy_vpn[google,azure,aws]
 ```
 
 ## Quick Start
@@ -89,7 +90,7 @@ pip install auto_proxy_vpn[google,azure]
 from auto_proxy_vpn.providers.digitalocean import ProxyManagerDigitalOcean
 
 manager = ProxyManagerDigitalOcean(
-    ssh_key="my-existing-key-name",
+    ssh_key="ssh-rsa AAAAB3...",
     token="dop_v1_xxxx..."          # or set DIGITALOCEAN_API_TOKEN env var
 )
 
@@ -136,15 +137,34 @@ with manager.get_proxy() as proxy:
     print(proxy.get_proxy_str())
 ```
 
-### 4. Multi-cloud with ProxyPool
+### 4. AWS
 
 ```python
-from auto_proxy_vpn import ProxyPool, GoogleConfig, AzureConfig, DigitalOceanConfig
+from auto_proxy_vpn.providers.aws import ProxyManagerAws
+
+manager = ProxyManagerAws(
+    ssh_key="ssh-rsa AAAAB3...",
+    credentials={
+        "AWS_ACCESS_KEY_ID": "AKIA...",
+        "AWS_SECRET_ACCESS_KEY": "...",
+    }
+    # or set env vars AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+)
+
+with manager.get_proxy() as proxy:
+    print(proxy.get_proxy_str())
+```
+
+### 5. Multi-cloud with ProxyPool
+
+```python
+from auto_proxy_vpn import ProxyPool, AwsConfig, GoogleConfig, AzureConfig, DigitalOceanConfig
 
 pool = ProxyPool(
+    AwsConfig(ssh_key="ssh-rsa AAAA..."),
     GoogleConfig(project="my-project", ssh_key="ssh-rsa AAAA..."),
     AzureConfig(ssh_key="ssh-rsa AAAA..."),
-    DigitalOceanConfig(ssh_key="my-key", token="dop_v1_xxxx..."),
+    DigitalOceanConfig(ssh_key="ssh-rsa AAAAB3...", token="dop_v1_xxxx..."),
 )
 
 # One proxy from a randomly selected provider
@@ -166,7 +186,7 @@ with pool.create_batch(6) as batch:
 | **Google Cloud** | Yes | - | Stable |
 | **Azure** | Yes | — | Stable |
 | **DigitalOcean** | Yes | - | Stable |
-| AWS | — | — | Planned |
+| **AWS** | Yes | — | Stable |
 | Oracle Cloud | — | — | Planned |
 | Alibaba Cloud | — | — | Planned |
 
@@ -181,6 +201,7 @@ Each provider has its own README with step-by-step credential setup, full API re
 | Google Cloud | [Google docs](auto_proxy_vpn/providers/google/README.md) |
 | Azure | [Azure docs](auto_proxy_vpn/providers/azure/README.md) |
 | DigitalOcean | [DigitalOcean docs](auto_proxy_vpn/providers/digitalocean/README.md) |
+| AWS | [AWS docs](auto_proxy_vpn/providers/aws/README.md) |
 
 > **Security:** All guides recommend storing credentials in a `.env` file (never via `export` in shell history or committed to version control). See each provider README for details.
 
@@ -195,7 +216,7 @@ Every provider exposes a **Manager** class that creates and manages proxy instan
 ```python
 from auto_proxy_vpn.providers.digitalocean import ProxyManagerDigitalOcean
 
-manager = ProxyManagerDigitalOcean(ssh_key="my-key")
+manager = ProxyManagerDigitalOcean(ssh_key="ssh_keys_files")
 
 # Context manager (recommended) — auto-cleanup on exit
 with manager.get_proxy() as proxy:
@@ -214,11 +235,12 @@ finally:
 `ProxyPool` distributes proxy creation across multiple providers **and multiple accounts of the same provider**. Each config object with different credentials creates a separate manager — proxies are then distributed evenly across all of them using round-robin random selection:
 
 ```python
-from auto_proxy_vpn import ProxyPool, GoogleConfig, AzureConfig, DigitalOceanConfig
+from auto_proxy_vpn import ProxyPool, AwsConfig, GoogleConfig, AzureConfig, DigitalOceanConfig
 
 pool = ProxyPool(
+    AwsConfig(ssh_key="ssh_keys"),
     GoogleConfig(project="my-project", ssh_key="ssh_keys"),
-    DigitalOceanConfig(ssh_key="my-key"),
+    DigitalOceanConfig(ssh_key="ssh_keys"),
 )
 
 proxy = pool.create_one(size="small", on_exit="destroy")
@@ -232,7 +254,7 @@ with pool.create_one(size="small", on_exit="destroy") as proxy:
 
 #### Multi-account per provider
 
-Pass multiple configs for the same provider with different credentials to multiply your capacity and distribute load across accounts. If a config omits credentials, the corresponding environment variable is used as fallback (e.g. `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_SUBSCRIPTION_ID`, `DIGITALOCEAN_API_TOKEN`):
+Pass multiple configs for the same provider with different credentials to multiply your capacity and distribute load across accounts. If a config omits credentials, the corresponding environment variable is used as fallback (e.g. `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `AZURE_SUBSCRIPTION_ID`, `DIGITALOCEAN_API_TOKEN`):
 
 ```python
 pool = ProxyPool(
@@ -240,7 +262,8 @@ pool = ProxyPool(
     GoogleConfig(project="project-1", ssh_key="ssh_keys", credentials="creds_1.json"),
     # Account 2: uses GOOGLE_APPLICATION_CREDENTIALS env var
     GoogleConfig(project="project-2", ssh_key="ssh_keys"),
-    # Plus an Azure account
+    # Plus AWS and Azure accounts
+    AwsConfig(ssh_key="ssh-rsa AAAA..."),
     AzureConfig(ssh_key="ssh-rsa AAAA..."),
 )
 
@@ -337,7 +360,7 @@ High-level orchestrator that distributes proxy creation across providers.
 from auto_proxy_vpn import ProxyPool
 
 pool = ProxyPool(
-    *provider_configs,      # GoogleConfig, AzureConfig, DigitalOceanConfig, ...
+    *provider_configs,      # AwsConfig, GoogleConfig, AzureConfig, DigitalOceanConfig, ...
     log=True,
     log_file=None,
     log_format="%(asctime)-10s %(levelname)-5s %(message)s",
@@ -411,6 +434,20 @@ with pool.create_batch(5) as batch:
 
 Dataclass-based configs used with `ProxyPool` or `Manager.from_config()`.
 
+#### `AwsConfig`
+
+```python
+from auto_proxy_vpn import AwsConfig
+
+AwsConfig(
+    ssh_key="ssh-rsa AAAA...",      # str | dict | list | file path
+    credentials={
+        "AWS_ACCESS_KEY_ID": "AKIA...",
+        "AWS_SECRET_ACCESS_KEY": "...",
+    },                               # optional; falls back to env vars
+)
+```
+
 #### `GoogleConfig`
 
 ```python
@@ -440,7 +477,7 @@ AzureConfig(
 from auto_proxy_vpn import DigitalOceanConfig
 
 DigitalOceanConfig(
-    ssh_key="my-key-name",
+    ssh_key="ssh-rsa AAAAB3...",
     token="dop_v1_xxxx...",         # or env var DIGITALOCEAN_API_TOKEN
     project_name="AutoProxyVPN",
     project_description="On demand proxies",
@@ -483,14 +520,14 @@ Before choosing this tool, keep in mind:
 ```
 auto_proxy_vpn/
 ├── __init__.py              # CloudProvider enum, public exports
-├── configs.py               # GoogleConfig, AzureConfig, DigitalOceanConfig, ManagerRuntimeConfig
+├── configs.py               # AwsConfig, GoogleConfig, AzureConfig, DigitalOceanConfig, ManagerRuntimeConfig
 ├── manager_register.py      # ProxyManagers registry + provider auto-discovery
 ├── proxy_pool.py            # ProxyPool, RandomManagerPicker
 ├── providers/
 │   ├── azure/               # Azure VM proxy provider
 │   ├── digitalocean/        # DigitalOcean droplet proxy + WireGuard VPN
 │   ├── google/              # Google Compute Engine proxy + WireGuard VPN
-│   ├── aws/                 # (planned)
+│   ├── aws/                 # AWS EC2 proxy provider
 │   ├── alibaba/             # (planned)
 │   └── oracle/              # (planned)
 └── utils/
