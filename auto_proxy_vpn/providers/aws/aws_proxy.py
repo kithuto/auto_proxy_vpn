@@ -124,9 +124,12 @@ class AwsProxy(BaseProxy):
             if self.is_async and not wait:
                 if instance.state['Name'] == 'running':
                     self._vm_started = True
+                    self.ip = instance.public_ip_address
             else:
                 instance.wait_until_running()
                 self._vm_started = True
+                instance.reload()
+                self.ip = instance.public_ip_address
         
         if not self._vm_started:
             return self.active

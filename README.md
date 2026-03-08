@@ -271,7 +271,21 @@ pool = ProxyPool(
 with pool.create_batch(9) as batch:
     for proxy in batch:
         print(proxy)
+
+running = pool.get_running_proxy_names()
+print(running)
+# {
+#   CloudProvider.GOOGLE: {
+#     "account_1": ["proxy1", "proxy2"],
+#     "account_2": ["proxy1"],
+#   },
+#   CloudProvider.AWS: {
+#     "account_1": [("proxy1", "proxy2")],
+#   },
+# }
 ```
+
+`account_1`, `account_2`, etc. preserve the same order used when configs are passed to `ProxyPool(...)`.
 
 ### Batch Creation
 
@@ -301,6 +315,8 @@ batch = manager.get_proxies(
 # Use batch[0], batch[1], batch[2]
 batch.close()
 ```
+
+`manager.get_proxies(...)` always returns a `ProxyBatch`, regardless of provider (AWS, Azure, Google, DigitalOcean, etc.).
 
 ### Authentication & IP Filtering
 
@@ -372,8 +388,28 @@ pool = ProxyPool(
 |---|---|---|
 | `create_one(...)` | `BaseProxy` | Create one proxy from a randomly selected provider |
 | `create_batch(count, ...)` | `ProxyBatch` | Create `count` proxies distributed across providers |
+| `get_sizes_and_regions(provider)` | `dict[Literal['small','medium','large'], list[str] \| list[tuple[str, list[str]]]]` | Get all available regions for a provider grouped by size |
+| `get_regions_by_size(provider, size)` | `list[str] \| list[tuple[str, list[str]]]` | Get regions for one provider and one size (`small`, `medium`, `large`) |
+| `get_running_proxy_names()` | `dict[CloudProvider, dict[str, list[str] \| list[tuple[str, str]]]]` | List running proxies grouped by provider and account (`account_1`, `account_2`, ...) |
 
-Both methods accept the same proxy parameters: `port`, `size`, `region`, `auth`, `allowed_ips`, `is_async`, `retry`, `proxy_name`/`proxy_names`, and `on_exit`.
+Shared options in `create_one(...)` and `create_batch(...)`: `port`/`ports`, `size`/`sizes`, `region`/`regions`, `auth`/`auths`, `allowed_ips`, `is_async`, `retry`, `proxy_name`/`proxy_names`, and `on_exit`.
+
+Inspect available regions to create proxies in specific provider regions:
+
+```python
+from auto_proxy_vpn import CloudProvider
+
+sizes_and_regions = pool.get_sizes_and_regions(CloudProvider.AWS)
+print(sizes_and_regions["small"])
+
+medium_regions = pool.get_regions_by_size(CloudProvider.AWS, "medium")
+print(medium_regions)
+
+# Simple create_one call in a specific AWS region
+proxy = pool.create_one(size="medium", region={CloudProvider.AWS: medium_regions[0]})
+print(proxy.get_proxy_str())
+proxy.close()
+```
 
 ---
 
@@ -411,6 +447,8 @@ with manager.get_proxy() as proxy:
 ### `ProxyBatch`
 
 Container for multiple proxies with iteration and lifecycle control.
+
+`ProxyBatch` is returned by both `pool.create_batch(...)` and every provider manager `get_proxies(...)` call.
 
 ```python
 with pool.create_batch(5) as batch:

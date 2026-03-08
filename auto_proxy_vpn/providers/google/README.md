@@ -138,6 +138,14 @@ finally:
 
 Factory class that provisions and manages Google Compute Engine proxy instances.
 
+**Instance sizes:**
+
+| Size | Machine type |
+|---|---|
+| `small` | `e2-micro` |
+| `medium` | `e2-highcpu-2` |
+| `large` | `e2-highcpu-4` |
+
 ```python
 ProxyManagerGoogle(
     ssh_key,                # str | dict | list — SSH public key(s) or path to key file
@@ -168,13 +176,22 @@ proxy = manager.get_proxy(
 )
 ```
 
-**Instance sizes:**
+#### `manager.get_proxies()`
 
-| Size | Machine type |
-|---|---|
-| `small` | `e2-micro` |
-| `medium` | `e2-highcpu-2` |
-| `large` | `e2-highcpu-4` |
+Create multiple proxies in one call and return a `ProxyBatch`.
+
+```python
+batch = manager.get_proxies(
+    number=3,
+    sizes=["small", "medium", "large"],
+    is_async=True,
+)
+
+for proxy in batch:
+    print(proxy.get_proxy_str())
+
+batch.close()
+```
 
 #### `manager.get_proxy_by_name()`
 

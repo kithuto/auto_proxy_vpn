@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auto_proxy_vpn"
-version = "0.2.0"
+version = "0.2.1"
 description = "A package to create on demand proxies and vpns in different cloud providers."
 keywords = ["vpn", "proxy", "networking", "cloud", "security", "web scrapping"]
 readme = "README.md"
@@ -51,7 +51,8 @@ markers = [
     "digitalocean: Tests requiring a DigitalOcean token",
     "google: Tests requiring Google Cloud credentials",
     "azure: Tests requiring Azure credentials",
-    "aws: Tests requiring AWS credentials"
+    "aws: Tests requiring AWS credentials",
+    "pool: Real tests for the ProxyPool class",
 ]
 addopts = [
     "-v",
@@ -66,4 +67,4 @@ omit = ["tests/*", "docs/*", ".github/*", "venv/*"]
 
 [tool.coverage.report]
 show_missing = true
-fail_under = 60
+fail_under = 80

@@ -3,11 +3,11 @@ from logging import INFO, Logger, basicConfig, getLogger
 from typing import Literal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from auto_proxy_vpn import ProxyManagers, BaseConfig, ManagerRuntimeConfig
+from auto_proxy_vpn import ProxyManagers, BaseConfig, ManagerRuntimeConfig, CloudProvider
 from auto_proxy_vpn.utils.base_proxy import BaseProxyManager, BaseProxy, ProxyBatch
 
 class RandomManagerPicker:
-    def __init__(self, managers: list[BaseProxyManager]):
+    def __init__(self, managers: list[tuple[CloudProvider, BaseProxyManager]]):
         """Round-robin random picker for proxy managers.
 
         The picker keeps a shuffled "bag" of manager instances and returns one
@@ -17,7 +17,7 @@ class RandomManagerPicker:
 
         Parameters
         ----------
-        managers : list[BaseProxyManager]
+        managers : list[tuple[CloudProvider, BaseProxyManager]]
             List of manager instances.
 
         Notes
@@ -25,7 +25,7 @@ class RandomManagerPicker:
         - Selection is random per cycle, not weighted.
         - If only one manager is provided, it is always returned.
         """
-        self._managers: list[BaseProxyManager] = managers
+        self._managers: list[tuple[CloudProvider, BaseProxyManager]] = managers
         self._bag = []
         self._refill_bag()
     
@@ -34,7 +34,7 @@ class RandomManagerPicker:
         self._bag = self._managers.copy()
         shuffle(self._bag)
     
-    def next(self) -> BaseProxyManager:
+    def next(self) -> tuple[CloudProvider, BaseProxyManager]:
         """Return the next manager, refilling the bag when needed."""
         if not self._bag:
             self._refill_bag()
@@ -43,7 +43,7 @@ class RandomManagerPicker:
     def __iter__(self):
         return self
     
-    def __next__(self) -> BaseProxyManager:
+    def __next__(self) -> tuple[CloudProvider, BaseProxyManager]:
         return self.next()
 
 class ProxyPool:
@@ -119,7 +119,7 @@ class ProxyPool:
         
         """
         
-        self.managers: list[BaseProxyManager] = []
+        self.managers: list[tuple[CloudProvider, BaseProxyManager]] = []
         self._check_provider_configs(provider_configs)
         self._initialize_managers(provider_configs, log, log_file, log_format, logger)
         self.random_manager_picker = RandomManagerPicker(self.managers)
@@ -156,6 +156,7 @@ class ProxyPool:
         """
         
         # all the managers will always share the same logger
+        self.logger = logger
         if log and not logger:
             basicConfig(filename=log_file,
                     format=log_format,
@@ -166,14 +167,14 @@ class ProxyPool:
         
         for provider_config in provider_configs:
             manager_cls = ProxyManagers.get_manager(provider_config.provider)
-            runtime_config = ManagerRuntimeConfig(log=log, logger=logger)
+            runtime_config = ManagerRuntimeConfig(log=log, logger=self.logger)
             manager = manager_cls.from_config(provider_config, runtime_config)
-            self.managers.append(manager)
+            self.managers.append((provider_config.provider, manager))
     
     def create_one(self,
                    port: int = 0,
                    size: Literal['small', 'medium', 'large'] = 'medium',
-                   region: str = '',
+                   region: dict[CloudProvider, str] = {},
                    auth: dict[Literal['user', 'password'], str] = {},
                    allowed_ips: str | list[str] = [],
                    is_async: bool = False,
@@ -209,14 +210,14 @@ class ProxyPool:
             The created proxy instance.
         """
         
-        manager = self.random_manager_picker.next()
-        return manager.get_proxy(port, size, region, auth, allowed_ips, is_async, retry, proxy_name, on_exit)
+        cloud_provider, manager = self.random_manager_picker.next()
+        return manager.get_proxy(port, size, region.get(cloud_provider, ''), auth, allowed_ips, is_async, retry, proxy_name, on_exit)
     
     def create_batch(self,
                      count: int,
                      ports: list[int] | int = 0,
                      sizes: list[Literal['small', 'medium', 'large']] | Literal['small', 'medium', 'large'] = 'medium',
-                     regions: list[str] | str = '',
+                     regions: dict[CloudProvider, list[str] | str] = {},
                      auths: list[dict[Literal['user', 'password'], str]] | dict[Literal['user', 'password'], str] = {},
                      allowed_ips: list[str] | str = [],
                      is_async: bool = True,
@@ -250,17 +251,17 @@ class ProxyPool:
         
         proxies = []
         futures = []
-        with ThreadPoolExecutor(max_workers=len(self.managers)) as executor:
+        with ThreadPoolExecutor(max_workers=min((10, len(self.managers)))) as executor:
             for num_proxies in distribution:
                 if num_proxies > 0:
-                    manager = self.random_manager_picker.next()
+                    cloud_provider, manager = self.random_manager_picker.next()
                     futures.append(
                         executor.submit(
                             manager.get_proxies,
                             num_proxies,
                             ports,
                             sizes,
-                            regions,
+                            regions.get(cloud_provider, ''),
                             auths,
                             allowed_ips,
                             is_async,
@@ -273,3 +274,97 @@ class ProxyPool:
                 proxies.extend(future.result().proxies)
         
         return ProxyBatch[BaseProxy](proxies)
+    
+    def get_sizes_and_regions(self, provider: CloudProvider) -> dict[Literal['small', 'medium', 'large'], list[str] | list[tuple[str, list[str]]]]:
+        """Get available regions for a specific provider.
+
+        Parameters
+        ----------
+        provider : CloudProvider
+            The cloud provider for which to retrieve regions.
+
+        Returns
+        -------
+        dict[Literal['small', 'medium', 'large'], list[str] | list[tuple[str, list[str]]]]
+            A dictionary mapping proxy sizes to their available regions.
+
+        Raises
+        ------
+        ValueError
+            If the specified provider is not configured in the pool.
+        """
+        
+        for cloud_provider, manager in self.managers:
+            if cloud_provider == provider:
+                return manager.get_sizes_and_regions()
+        
+        raise ValueError(f"Provider {provider} is not configured in this ProxyPool.")
+    
+    def get_regions_by_size(self, provider: CloudProvider, size: Literal['small', 'medium', 'large']) -> list[str] | list[tuple[str, list[str]]]:
+        """Get available regions for a specific provider and proxy size.
+
+        Parameters
+        ----------
+        provider : CloudProvider
+            The cloud provider for which to retrieve regions.
+        size : Literal['small', 'medium', 'large']
+            The proxy size for which to retrieve regions.
+
+        Returns
+        -------
+        list[str] | list[tuple[str, list[str]]]
+            A list of regions where the specified proxy size is available.
+
+        Raises
+        ------
+        ValueError
+            If the specified provider is not configured in the pool or if the
+            specified size is invalid for that provider.
+        """
+        
+        sizes_and_regions = self.get_sizes_and_regions(provider)
+        if size not in sizes_and_regions:
+            raise ValueError(f"Size {size} is not valid.")
+        
+        return sizes_and_regions[size]
+    
+    def get_running_proxy_names(self) -> dict[CloudProvider, dict[str, list[str] | list[tuple[str, str]]]]:
+        """Get names of currently running proxies grouped by provider and account.
+
+        This method supports multiple accounts for a single provider. For each 
+        provider, entries are grouped by account order using keys ``account_1``, 
+        ``account_2``, etc. 
+        Account numbering preserves the same order used when configs were
+        passed to :class:`ProxyPool` during initialization.
+
+        Returns
+        -------
+        dict[CloudProvider, dict[str, list[str] | list[tuple[str, str]]]]
+            Nested mapping where each provider contains one dictionary per
+            configured account/manager, and each account value is the exact
+            output returned by that manager's ``get_running_proxy_names()``.
+
+        Examples
+        --------
+        Example output::
+
+            {
+                CloudProvider.GOOGLE: {
+                    "account_1": ["proxy1", "proxy2"],
+                    "account_2": ["proxy1"],
+                },
+                CloudProvider.AWS: {
+                    "account_1": [("proxy1", "proxy2")],
+                },
+            }
+        """
+
+        running_names_by_account: dict[CloudProvider, dict[str, list[str] | list[tuple[str, str]]]] = {}
+        provider_counts: dict[CloudProvider, int] = {}
+
+        for cloud_provider, manager in self.managers:
+            provider_counts[cloud_provider] = provider_counts.get(cloud_provider, 0) + 1
+            account_key = f"account_{provider_counts[cloud_provider]}"
+            running_names_by_account.setdefault(cloud_provider, {})[account_key] = manager.get_running_proxy_names()
+
+        return running_names_by_account

@@ -117,6 +117,14 @@ finally:
 
 Factory class that provisions and manages DigitalOcean proxy droplets.
 
+**Droplet sizes:**
+
+| Size | DigitalOcean slug | Note |
+|---|---|---|
+| `small` | `s-1vcpu-512mb-10gb` | Fewer regions available |
+| `medium` | `s-1vcpu-1gb` | All regions |
+| `large` | `s-1vcpu-2gb` | All regions |
+
 ```python
 ProxyManagerDigitalOcean(
     ssh_key,                    # str | dict | list — ssh key, public key dict, or path to key file
@@ -157,13 +165,22 @@ proxy = manager.get_proxy(
 )
 ```
 
-**Droplet sizes:**
+#### `manager.get_proxies()`
 
-| Size | DigitalOcean slug | Note |
-|---|---|---|
-| `small` | `s-1vcpu-512mb-10gb` | Fewer regions available |
-| `medium` | `s-1vcpu-1gb` | All regions |
-| `large` | `s-1vcpu-2gb` | All regions |
+Create multiple proxies in one call and return a `ProxyBatch`.
+
+```python
+batch = manager.get_proxies(
+    number=3,
+    sizes=["small", "medium", "large"],
+    is_async=True,
+)
+
+for proxy in batch:
+    print(proxy.get_proxy_str())
+
+batch.close()
+```
 
 #### `manager.get_proxy_by_name()`
 

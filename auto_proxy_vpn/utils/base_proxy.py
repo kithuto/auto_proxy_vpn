@@ -203,12 +203,22 @@ class ProxyBatch(Generic[T]):
         """Close all proxies when leaving context manager scope."""
         self.close()
     
-    def close(self):
-        """Close every proxy in the batch and mark the batch as closed."""
+    def close(self, wait: bool = False):
+        """Close every proxy in the batch and mark the batch as closed.
+
+        Parameters
+        ----------
+        wait : bool
+            If True, wait for each proxy to close synchronously. If False, close asynchronously.
+        """
         
         if self._closed:
             return
         for proxy in self.proxies:
+            if wait:
+                proxy.is_async = False
+            else:
+                proxy.is_async = True
             proxy.close()
         self._closed = True
 
@@ -279,7 +289,8 @@ class BaseProxyManager(ABC, Generic[T]):
         Returns
         -------
         ProxyBatch
-            Batch of proxy instances.
+            Batch of proxy instances. This is the return type for
+            ``get_proxies(...)`` in every provider manager implementation.
         
         Raises
         ------
