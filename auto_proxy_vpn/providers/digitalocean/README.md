@@ -47,7 +47,7 @@ Load it at the start of your script:
 from dotenv import load_dotenv
 load_dotenv()
 
-manager = ProxyManagerDigitalOcean(ssh_key="my-existing-key-name")
+manager = ProxyManagerDigitalOcean(ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...")
 ```
 
 Alternatively, pass the token directly in code (less secure — avoid committing secrets):
@@ -55,7 +55,7 @@ Alternatively, pass the token directly in code (less secure — avoid committing
 ```python
 manager = ProxyManagerDigitalOcean(
     token="dop_v1_xxxx...",
-    ssh_key="my-existing-key-name",
+    ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...",
 )
 ```
 
@@ -75,7 +75,7 @@ from auto_proxy_vpn.providers.digitalocean import ProxyManagerDigitalOcean, Digi
 
 ```python
 manager = ProxyManagerDigitalOcean(
-    ssh_key="my-existing-key-name"   # name of an SSH key already in your DO account
+    ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2..."   # SSH key
 )
 
 # Context manager — droplet is destroyed automatically on exit
@@ -86,15 +86,6 @@ with manager.get_proxy() as proxy:
     import requests
     r = requests.get("https://httpbin.org/ip", proxies=proxy.get_proxy())
     print(r.json())
-```
-
-### Creating a New SSH Key on DigitalOcean
-
-```python
-manager = ProxyManagerDigitalOcean(
-    ssh_key={"name": "my-proxy-key", "public_key": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2..."},
-    token="dop_v1_xxxx...",
-)
 ```
 
 ### Manual Lifecycle
@@ -295,7 +286,6 @@ if proxy.is_active(wait=True):
 ```
 
 ### SSH Keys from File
-Only accepts already existent digitalocean key names
 ```python
 manager = ProxyManagerDigitalOcean(
     ssh_key="/path/to/do_keys",  # one public ssh key per line
