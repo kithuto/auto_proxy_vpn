@@ -82,6 +82,12 @@ Install multiple extras together if needed:
 pip install auto_proxy_vpn[google,azure,aws]
 ```
 
+Install all providers:
+
+```bash
+pip install auto_proxy_vpn[all]
+```
+
 ## Quick Start
 
 ### 1. DigitalOcean — simplest setup

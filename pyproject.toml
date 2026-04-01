@@ -42,6 +42,15 @@ azure = [
     "azure-mgmt-compute",
 ]
 aws = ["boto3"]
+all = [
+    "google-cloud-compute",
+    "azure-identity",
+    "azure-mgmt-subscription",
+    "azure-mgmt-resource",
+    "azure-mgmt-network",
+    "azure-mgmt-compute",
+    "boto3",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -63,7 +72,7 @@ addopts = [
 
 [tool.coverage.run]
 source = ["auto_proxy_vpn"]
-omit = ["tests/*", "docs/*", ".github/*", "venv/*"]
+omit = ["tests/*", "docs/*", ".github/*"]
 
 [tool.coverage.report]
 show_missing = true
