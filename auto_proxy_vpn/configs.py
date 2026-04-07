@@ -3,6 +3,7 @@ from logging import Logger
 from typing import ClassVar
 from dataclasses import dataclass, field
 from os import environ
+from pathlib import Path
 
 from auto_proxy_vpn import CloudProvider
 
@@ -16,7 +17,7 @@ class ManagerRuntimeConfig:
 @dataclass
 class BaseConfig(ABC):
     provider: ClassVar['CloudProvider']
-    ssh_key: list[dict[str, str] | str] | dict[str, str] | str
+    ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path
     
     @abstractmethod
     def unique_key(self) -> tuple[CloudProvider, str]:

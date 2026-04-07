@@ -5,6 +5,7 @@ from os.path import isfile
 from random import choice, randint, shuffle
 from re import finditer, search
 from time import sleep
+from pathlib import Path
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, AzureConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
@@ -166,7 +167,7 @@ class AzureProxy(BaseProxy):
 @ProxyManagers.register(CloudProvider.AZURE)
 class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
     def __init__(self,
-                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str,
+                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
                  credentials: str | dict[str, str] = '',
                  log: bool = True,
                  log_file: str | None = None,
@@ -194,7 +195,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
 
         Parameters
         ----------
-        ssh_key : list[dict[str, str] | str] | dict[str, str] | str
+        ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
             SSH key configuration for created VMs. Accepted forms are a
             single public key string, a dict with
             ``{'name': ..., 'public_key': ...}``, a list mixing both forms,
@@ -258,6 +259,9 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
         
         if (not credentials or isinstance(credentials, dict) and "AZURE_SUBSCRIPTION_ID" not in credentials) and not environ.get("AZURE_SUBSCRIPTION_ID", ""):
             raise ValueError("Azure credentials not provided. Please provide them as a parameter or set the AZURE_SUBSCRIPTION_ID environment variable.")
+        
+        if isinstance(ssh_key, Path):
+            ssh_key = str(ssh_key)
         
         if isinstance(ssh_key, str) and isfile(ssh_key):
             with open(ssh_key, "r") as f:

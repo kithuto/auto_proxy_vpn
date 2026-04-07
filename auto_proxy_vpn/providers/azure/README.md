@@ -206,7 +206,7 @@ Factory class that provisions and manages Azure proxy VMs.
 
 ```python
 ProxyManagerAzure(
-    ssh_key,                # str | dict | list — SSH public key(s) or path to key file
+    ssh_key,                # str | Path | dict | list — SSH public key(s) or path to key file
     credentials="",         # str | dict — subscription ID, credential dict, or "" for env vars
     log=True,               # bool — enable logging
     log_file=None,          # str | None — log file path (None = stdout)

@@ -6,6 +6,7 @@ import logging
 from re import search
 from os import environ
 from os.path import isfile
+from pathlib import Path
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, DigitalOceanConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
@@ -161,7 +162,7 @@ class DigitalOceanProxy(BaseProxy):
 @ProxyManagers.register(CloudProvider.DIGITALOCEAN)
 class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
     def __init__(self,
-                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str,
+                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
                  project_name: str = 'AutoProxyVPN',
                  project_description: str = 'On demand proxies',
                  token: str = '',
@@ -177,7 +178,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
 
         Parameters
         ----------
-        ssh_key : list[dict[str, str] | str] | dict[str, str] | str
+        ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
             SSH key configuration used for new droplets. Accepted forms are a
             single public key string, a dict with
             ``{'name': ..., 'public_key': ...}``, a list mixing both forms,
@@ -238,6 +239,9 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             finally:
                 proxy.close()
         """
+        
+        if isinstance(ssh_key, Path):
+            ssh_key = str(ssh_key)
         
         if isinstance(ssh_key, str) and isfile(ssh_key):
             with open(ssh_key, "r") as f:

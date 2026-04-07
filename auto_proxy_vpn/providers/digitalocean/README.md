@@ -118,7 +118,7 @@ Factory class that provisions and manages DigitalOcean proxy droplets.
 
 ```python
 ProxyManagerDigitalOcean(
-    ssh_key,                    # str | dict | list — ssh key, public key dict, or path to key file
+    ssh_key,                    # str | Path | dict | list — ssh key, public key dict, or path to key file
     project_name="AutoProxyVPN",# str — DO project to group proxies under
     project_description="On demand proxies",
     token="",                   # str — API token (empty = env var DIGITALOCEAN_API_TOKEN)
