@@ -168,7 +168,7 @@ Factory class that provisions and manages AWS EC2 proxy instances.
 
 ```python
 ProxyManagerAws(
-    ssh_key,                # str | dict | list — SSH public key(s) or path to key file
+    ssh_key,                # str | Path | dict | list — SSH public key(s) or path to key file
     credentials=None,       # dict | None — AWS keys (None = env vars)
     log=True,               # bool — enable logging
     log_file=None,          # str | None — log file path (None = stdout)

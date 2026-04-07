@@ -510,7 +510,7 @@ GoogleConfig(
 from auto_proxy_vpn import AzureConfig
 
 AzureConfig(
-    ssh_key="ssh-rsa AAAA...",
+    ssh_key="ssh-rsa AAAA...",      # str | dict | list | file path
     credentials="subscription-id",  # str | dict with AZURE_* keys (or env vars)
 )
 ```
@@ -521,7 +521,7 @@ AzureConfig(
 from auto_proxy_vpn import DigitalOceanConfig
 
 DigitalOceanConfig(
-    ssh_key="ssh-rsa AAAAB3...",
+    ssh_key="ssh-rsa AAAAB3...",      # str | dict | list | file path
     token="dop_v1_xxxx...",         # or env var DIGITALOCEAN_API_TOKEN
     project_name="AutoProxyVPN",
     project_description="On demand proxies",

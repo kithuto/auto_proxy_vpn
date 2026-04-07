@@ -6,6 +6,7 @@ from random import randint, shuffle, choice
 from re import finditer, search
 from itertools import chain
 from time import sleep
+from pathlib import Path
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, GoogleConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
@@ -235,7 +236,7 @@ class GoogleProxy(BaseProxy):
 @ProxyManagers.register(CloudProvider.GOOGLE)
 class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
     def __init__(self,
-                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str,
+                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
                  project: str,
                  credentials: str = '',
                  log: bool = True,
@@ -252,7 +253,7 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
         ----------
         project : str
             Google Cloud project ID where proxy instances are created.
-        ssh_key : list[dict[str, str] | str] | dict[str, str] | str
+        ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
             SSH key configuration for created instances, provided either as a
             single public key string, a dictionary with keys
             ``{'name': ..., 'public_key': ...}``, a list mixing both formats,
@@ -317,6 +318,10 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             credentials_file = credentials
         
         self.project = project
+        
+        if isinstance(ssh_key, Path):
+            ssh_key = str(ssh_key)
+        
         if isinstance(ssh_key, str) and isfile(ssh_key):
             with open(ssh_key, "r") as f:
                 ssh_key = [x.strip('\n') for x in f.readlines() if x.strip('\n')]

@@ -148,7 +148,7 @@ Factory class that provisions and manages Google Compute Engine proxy instances.
 
 ```python
 ProxyManagerGoogle(
-    ssh_key,                # str | dict | list — SSH public key(s) or path to key file
+    ssh_key,                # str | Path | dict | list — SSH public key(s) or path to key file
     project,                # str — Google Cloud project ID
     credentials="",         # str — path to service account JSON (empty = env var)
     log=True,               # bool — enable logging

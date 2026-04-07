@@ -5,6 +5,7 @@ from typing import Literal
 from random import randint, shuffle, choice
 from re import search, finditer
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, AwsConfig, ManagerRuntimeConfig
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
@@ -176,7 +177,7 @@ class AwsProxy(BaseProxy):
 @ProxyManagers.register(CloudProvider.AWS)
 class ProxyManagerAws(BaseProxyManager[AwsProxy]):
     def __init__(self,
-                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str,
+                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
                  credentials: dict[str, str] | None = None,
                  log: bool = True,
                  log_file: str | None = None,
@@ -190,7 +191,7 @@ class ProxyManagerAws(BaseProxyManager[AwsProxy]):
 
         Parameters
         ----------
-        ssh_key : list[dict[str, str] | str] | dict[str, str] | str
+        ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
             SSH key configuration for created instances. Accepted forms are a
             single public key string, a dict with
             ``{'name': ..., 'public_key': ...}``, a list mixing both forms,
@@ -230,6 +231,9 @@ class ProxyManagerAws(BaseProxyManager[AwsProxy]):
         self._aws_access_key_id = credentials.get("AWS_ACCESS_KEY_ID") or environ.get("AWS_ACCESS_KEY_ID", "")
         self._aws_secret_access_key = credentials.get("AWS_SECRET_ACCESS_KEY") or environ.get("AWS_SECRET_ACCESS_KEY", "")
         
+        if isinstance(ssh_key, Path):
+            ssh_key = str(ssh_key)
+
         if isinstance(ssh_key, str) and isfile(ssh_key):
             with open(ssh_key, "r") as f:
                 ssh_key = [x.strip('\n') for x in f.readlines() if x.strip('\n')]
