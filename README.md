@@ -1,4 +1,8 @@
 <p align="center">
+    <img src="https://raw.githubusercontent.com/kithuto/auto_proxy_vpn/main/docs/_static/logo.png" alt="auto_proxy_vpn logo" width="200" />
+</p>
+
+<p align="center">
   <h1 align="center">Auto proxy vpn</h1>
   <p align="center">
     On-demand proxies and VPNs across multiple cloud providers — from a single Python call.

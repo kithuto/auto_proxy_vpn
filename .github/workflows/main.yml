@@ -5,7 +5,9 @@ on:
     branches:
       - main
     paths-ignore:
+      - 'docs/**'
       - '.github/**'
+      - '**.md'
   workflow_dispatch:
 
 permissions:
