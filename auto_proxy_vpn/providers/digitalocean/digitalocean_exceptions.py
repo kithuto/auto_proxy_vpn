@@ -1,3 +1,2 @@
 class DropletNotProxyException(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    """Raised when a DigitalOcean droplet is not managed as a proxy."""

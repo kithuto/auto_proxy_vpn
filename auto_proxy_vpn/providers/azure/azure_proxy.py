@@ -24,6 +24,53 @@ from .azure_utils import start_proxy
 
 
 class AzureProxy(BaseProxy):
+    """Represent an Azure VM-based proxy instance.
+
+    This object stores proxy metadata and lifecycle state and can be initialized
+    either for a newly created proxy VM or by reloading an existing one.
+
+    Parameters
+    ----------
+    manager : ProxyManagerAzure
+        Manager instance that owns Azure SDK clients and resources used by this
+        proxy.
+    name : str
+        Proxy resource group / VM base name.
+    ip : str
+        Public IPv4 address of the proxy. May be empty while the VM is still
+        provisioning.
+    port : int
+        Proxy listening TCP port.
+    region : str
+        Azure region where the proxy resources are deployed.
+    proxy_instance : str, optional
+        Azure VM size used for this proxy (for example ``'Standard_B1s'``).
+        Defaults to ``''``.
+    allowed_ips : list[str], optional
+        Source IPs/ranges allowed to connect to the proxy. Used for
+        startup/retry metadata. Defaults to an empty list.
+    is_async : bool, optional
+        If True, do not block waiting for full startup completion. Defaults to
+        ``False``.
+    user : str, optional
+        Basic-auth username configured in Squid. Defaults to ``''``.
+    password : str, optional
+        Basic-auth password configured in Squid. Defaults to ``''``.
+    logger : Logger or None, optional
+        Logger used for lifecycle and status messages. Defaults to ``None``.
+    reload : bool, optional
+        If True and ``ip`` is already set, skip initial activation checks for a
+        previously created proxy. Defaults to ``False``.
+    on_exit : {'keep', 'destroy'}, optional
+        Behavior when the proxy is closed. ``'destroy'`` removes Azure
+        resources and ``'keep'`` leaves them running. Defaults to ``'destroy'``.
+
+    Raises
+    ------
+    ValueError
+        If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
+    """
+
     def __init__(
         self,
         manager: "ProxyManagerAzure",
@@ -40,56 +87,6 @@ class AzureProxy(BaseProxy):
         reload: bool = False,
         on_exit: Literal["keep", "destroy"] = "destroy",
     ):
-        """Represent an Azure VM-based proxy instance.
-
-        This object stores proxy metadata and lifecycle state and can be
-        initialized either for a newly created proxy VM or by reloading an
-        existing one.
-
-        Parameters
-        ----------
-        manager : ProxyManagerAzure
-            Manager instance that owns Azure SDK clients and resources used
-            by this proxy.
-        name : str
-            Proxy resource group / VM base name.
-        ip : str
-            Public IPv4 address of the proxy. May be empty while the VM is
-            still provisioning.
-        port : int
-            Proxy listening TCP port.
-        region : str
-            Azure region where the proxy resources are deployed.
-        proxy_instance : str, optional
-            Azure VM size used for this proxy (for example
-            ``'Standard_B1s'``). Defaults to ``''``.
-        allowed_ips : list[str], optional
-            Source IPs/ranges allowed to connect to the proxy. Used for
-            startup/retry metadata. Defaults to an empty list.
-        is_async : bool, optional
-            If True, do not block waiting for full startup completion.
-            Defaults to ``False``.
-        user : str, optional
-            Basic-auth username configured in Squid. Defaults to ``''``.
-        password : str, optional
-            Basic-auth password configured in Squid. Defaults to ``''``.
-        logger : Logger or None, optional
-            Logger used for lifecycle and status messages. Defaults to
-            ``None``.
-        reload : bool, optional
-            If True and ``ip`` is already set, skip initial activation checks
-            for a previously created proxy. Defaults to ``False``.
-        on_exit : {'keep', 'destroy'}, optional
-            Behavior when the proxy is closed. ``'destroy'`` removes Azure
-            resources and ``'keep'`` leaves them running. Defaults to
-            ``'destroy'``.
-
-        Raises
-        ------
-        ValueError
-            If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
-        """
-
         self.manager = manager
         self.name = name
         self.ip = ip
@@ -227,6 +224,88 @@ class AzureProxy(BaseProxy):
 
 @ProxyManagers.register(CloudProvider.AZURE)
 class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
+    """Manager that provisions Azure proxy virtual machines.
+
+    This class validates Azure credentials and SSH key input, configures
+    logging, imports Azure SDK clients, and loads available VM regions and size
+    mappings used by the manager.
+
+    To obtain Azure credentials, create a subscription and register an
+    application in Azure Active Directory with the appropriate permissions.
+    Then provide the subscription ID, client ID, client secret, and tenant ID as
+    environment variables or directly as a dictionary.
+
+    With Azure CLI you can obtain the required credentials by running::
+
+        az ad sp create-for-rbac --name "my-proxy-manager" --role contributor --scopes /subscriptions/{subscription-id}
+
+    And save the output in a ``.env`` file or set the environment variables:
+    ``appId`` -> ``AZURE_CLIENT_ID``, ``password`` -> ``AZURE_CLIENT_SECRET``,
+    and ``tenant`` -> ``AZURE_TENANT_ID``.
+
+    Parameters
+    ----------
+    ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
+        SSH key configuration for created VMs. Accepted forms are a single
+        public key string, a dict with ``{'name': ..., 'public_key': ...}``, a
+        list mixing both forms, or a file path containing one public key per
+        line.
+    credentials : str or dict[str, str], optional
+        Azure credential configuration. Supported values are: subscription ID
+        as a string, dict containing ``AZURE_SUBSCRIPTION_ID``, optionally with
+        ``AZURE_CLIENT_ID``, ``AZURE_CLIENT_SECRET`` and ``AZURE_TENANT_ID``, or
+        empty value to rely on environment variables. Defaults to ``''``.
+    log : bool, optional
+        Enable logging for manager actions. Defaults to ``True``.
+    log_file : str, optional
+        File path for logging output. If empty, logging output goes to the
+        terminal. Defaults to ``''``.
+    log_format : str, optional
+        Format string used when creating an internal logger. Defaults to
+        ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
+    logger : Logger or None, optional
+        Custom logger instance. When provided, ``log_file`` and ``log_format``
+        are ignored. Defaults to ``None``.
+
+    Raises
+    ------
+    ValueError
+        If subscription information is missing both in ``credentials`` and in
+        ``AZURE_SUBSCRIPTION_ID`` environment variable.
+    TypeError
+        If ``ssh_key`` has an invalid structure or no valid SSH keys are found.
+    ImportError
+        If required Azure SDK packages are not installed.
+
+    Examples
+    --------
+    Use environment-based credentials with a context manager::
+
+        manager = ProxyManagerAzure(
+            ssh_key='ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...'
+        )
+        with manager.get_proxy() as proxy:
+            result = requests.get('https://google.com', proxies=proxy.get_proxy())
+
+    Pass credentials explicitly and close manually::
+
+        manager = ProxyManagerAzure(
+            credentials={
+                'AZURE_SUBSCRIPTION_ID': 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+                'AZURE_CLIENT_ID': 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+                'AZURE_CLIENT_SECRET': 'your-client-secret',
+                'AZURE_TENANT_ID': 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+            },
+            ssh_key='ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...'
+        )
+        proxy = manager.get_proxy()
+        try:
+            # Use the proxy
+            pass
+        finally:
+            proxy.close()
+    """
+
     def __init__(
         self,
         ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
@@ -236,90 +315,6 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
         log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
         logger: Logger | None = None,
     ):
-        """Create a manager that provisions Azure proxy virtual machines.
-
-        This initializer validates Azure credentials and SSH key input,
-        configures logging, imports Azure SDK clients, and loads available
-        VM regions and size mappings used by the manager.
-
-        To obtain Azure credentials, you need to create a new subscription and
-        register an application in Azure Active Directory with the appropriate
-        permissions. Then, you can provide the subscription ID, client ID, client
-        secret, and tenant ID either as environment variables or directly as a
-        dictionary to the manager.\n
-        With azure cli you can easily obtain the required credentials by running:\n
-
-        $ az ad sp create-for-rbac --name "my-proxy-manager" --role contributor --scopes /subscriptions/{subscription-id}
-
-        And save in a .env file or set the environment variables directly:\n
-        appId → AZURE_CLIENT_ID\n
-        password → AZURE_CLIENT_SECRET\n
-        tenant → AZURE_TENANT_ID
-
-        Parameters
-        ----------
-        ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
-            SSH key configuration for created VMs. Accepted forms are a
-            single public key string, a dict with
-            ``{'name': ..., 'public_key': ...}``, a list mixing both forms,
-            or a file path containing one public key per line.
-        credentials : str or dict[str, str], optional
-            Azure credential configuration. Supported values are:
-            subscription ID as a string, dict containing
-            ``AZURE_SUBSCRIPTION_ID``, optionally with ``AZURE_CLIENT_ID``,
-            ``AZURE_CLIENT_SECRET`` and ``AZURE_TENANT_ID``, or empty value
-            to rely on environment variables. Defaults to ``''``.
-        log : bool, optional
-            Enable logging for manager actions. Defaults to ``True``.
-        log_file : str, optional
-            File path for logging output. If empty, logging output goes to
-            the terminal. Defaults to ``''``.
-        log_format : str, optional
-            Format string used when creating an internal logger. Defaults to
-            ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
-        logger : Logger or None, optional
-            Custom logger instance. When provided, ``log_file`` and
-            ``log_format`` are ignored. Defaults to ``None``.
-
-        Raises
-        ------
-        ValueError
-            If subscription information is missing both in ``credentials``
-            and in ``AZURE_SUBSCRIPTION_ID`` environment variable.
-        TypeError
-            If ``ssh_key`` has an invalid structure or no valid SSH keys are found.
-        ImportError
-            If required Azure SDK packages are not installed.
-
-        Examples
-        --------
-        Use environment-based credentials with a context manager::
-
-            manager = ProxyManagerAzure(
-                ssh_key='ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...'
-            )
-            with manager.get_proxy() as proxy:
-                result = requests.get('https://google.com', proxies=proxy.get_proxy())
-
-        Pass credentials explicitly and close manually::
-
-            manager = ProxyManagerAzure(
-                credentials={
-                    'AZURE_SUBSCRIPTION_ID': 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-                    'AZURE_CLIENT_ID': 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-                    'AZURE_CLIENT_SECRET': 'your-client-secret',
-                    'AZURE_TENANT_ID': 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-                },
-                ssh_key='ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...'
-            )
-            proxy = manager.get_proxy()
-            try:
-                # Use the proxy
-                pass
-            finally:
-                proxy.close()
-        """
-
         if (
             not credentials
             or isinstance(credentials, dict)

@@ -2,22 +2,21 @@ from subprocess import run
 
 
 class SSHClient:
-    def __init__(self, ip: str, user: str, strict: bool = False):
-        """
-        Creates an SSH client to connect to a remote server and execute commands or download files.
-        Checks the connection to the server before executing any command to ensure it is active.
+    """Client for executing commands and downloading files over SSH.
 
-        Parameters
-        ----------
-        ip : str
-            The IP address of the remote server.
-        user : str
-            The username to use for the SSH connection.
-        strict : bool
-            Whether to use strict host key checking. If False, it will not
-            check the host key and will automatically add it to the known
-            hosts. Defaults to ``False``.
-        """
+    Parameters
+    ----------
+    ip : str
+        The IP address of the remote server.
+    user : str
+        The username to use for the SSH connection.
+    strict : bool
+        Whether to use strict host key checking. If False, it will not check
+        the host key and will automatically add it to the known hosts.
+        Defaults to ``False``.
+    """
+
+    def __init__(self, ip: str, user: str, strict: bool = False):
         self.ip = ip
         self.user = user
         # No strict host key Checking if strict = False

@@ -19,6 +19,57 @@ from .aws_utils import get_region_instances, start_proxy
 
 
 class AwsProxy(BaseProxy):
+    """Represent an AWS EC2-based proxy instance.
+
+    This object stores proxy metadata and runtime state and can be initialized
+    either for a newly created proxy EC2 instance or by reloading an existing
+    one.
+
+    Parameters
+    ----------
+    manager : ProxyManagerAws
+        Manager instance that owns AWS SDK clients and credentials used by this
+        proxy.
+    instance_id : str
+        AWS EC2 instance ID for the proxy VM.
+    group_id : str
+        AWS security group ID associated with the proxy instance.
+    name : str
+        Proxy name stored in EC2 tags.
+    ip : str
+        Public IPv4 address of the proxy.
+    port : int
+        Proxy listening TCP port.
+    region : str
+        AWS region where the proxy resources are deployed.
+    proxy_instance : str, optional
+        EC2 instance type used for this proxy (for example ``'t3.micro'``).
+        Defaults to ``''``.
+    allowed_ips : list[str], optional
+        Source IPs/ranges allowed to connect to the proxy. Used for
+        startup/reload metadata. Defaults to an empty list.
+    is_async : bool, optional
+        If True, do not block waiting for full startup/teardown completion.
+        Defaults to ``False``.
+    user : str, optional
+        Basic-auth username configured in Squid. Defaults to ``''``.
+    password : str, optional
+        Basic-auth password configured in Squid. Defaults to ``''``.
+    logger : Logger or None, optional
+        Logger used for lifecycle and status messages. Defaults to ``None``.
+    reload : bool, optional
+        If True, this object is being created from an existing proxy and emits
+        reload-oriented log messages. Defaults to ``False``.
+    on_exit : {'keep', 'destroy'}, optional
+        Behavior when the proxy is closed. ``'destroy'`` terminates cloud
+        resources and ``'keep'`` leaves them running. Defaults to ``'destroy'``.
+
+    Raises
+    ------
+    ValueError
+        If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
+    """
+
     def __init__(
         self,
         manager: "ProxyManagerAws",
@@ -37,59 +88,6 @@ class AwsProxy(BaseProxy):
         reload: bool = False,
         on_exit: Literal["keep", "destroy"] = "destroy",
     ):
-        """Represent an AWS EC2-based proxy instance.
-
-        This object stores proxy metadata and runtime state and can be
-        initialized either for a newly created proxy EC2 instance or by
-        reloading an existing one.
-
-        Parameters
-        ----------
-        manager : ProxyManagerAws
-            Manager instance that owns AWS SDK clients and credentials used
-            by this proxy.
-        instance_id : str
-            AWS EC2 instance ID for the proxy VM.
-        group_id : str
-            AWS security group ID associated with the proxy instance.
-        name : str
-            Proxy name stored in EC2 tags.
-        ip : str
-            Public IPv4 address of the proxy.
-        port : int
-            Proxy listening TCP port.
-        region : str
-            AWS region where the proxy resources are deployed.
-        proxy_instance : str, optional
-            EC2 instance type used for this proxy (for example ``'t3.micro'``).
-            Defaults to ``''``.
-        allowed_ips : list[str], optional
-            Source IPs/ranges allowed to connect to the proxy. Used for
-            startup/reload metadata. Defaults to an empty list.
-        is_async : bool, optional
-            If True, do not block waiting for full startup/teardown completion.
-            Defaults to ``False``.
-        user : str, optional
-            Basic-auth username configured in Squid. Defaults to ``''``.
-        password : str, optional
-            Basic-auth password configured in Squid. Defaults to ``''``.
-        logger : Logger or None, optional
-            Logger used for lifecycle and status messages. Defaults to
-            ``None``.
-        reload : bool, optional
-            If True, this object is being created from an existing proxy and
-            emits reload-oriented log messages. Defaults to ``False``.
-        on_exit : {'keep', 'destroy'}, optional
-            Behavior when the proxy is closed. ``'destroy'`` terminates cloud
-            resources and ``'keep'`` leaves them running. Defaults to
-            ``'destroy'``.
-
-        Raises
-        ------
-        ValueError
-            If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
-        """
-
         self.manager = manager
         self.instance_id = instance_id
         self.group_id = group_id
@@ -206,6 +204,46 @@ class AwsProxy(BaseProxy):
 
 @ProxyManagers.register(CloudProvider.AWS)
 class ProxyManagerAws(BaseProxyManager[AwsProxy]):
+    """Manager that provisions AWS EC2 proxy instances.
+
+    This class validates AWS credentials and SSH key input, configures logging,
+    imports AWS SDK clients, and loads available regions and size mappings used
+    by the manager.
+
+    Parameters
+    ----------
+    ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
+        SSH key configuration for created instances. Accepted forms are a single
+        public key string, a dict with ``{'name': ..., 'public_key': ...}``, a
+        list mixing both forms, or a file path containing one public key per
+        line.
+    credentials : dict[str, str] or None, optional
+        AWS credential configuration. Supported keys are ``AWS_ACCESS_KEY_ID``
+        and ``AWS_SECRET_ACCESS_KEY``. When omitted, environment variables are
+        used. Defaults to ``None``.
+    log : bool, optional
+        Enable logging for manager actions. Defaults to ``True``.
+    log_file : str or None, optional
+        File path for logging output. If None, logging output goes to the
+        terminal. Defaults to ``None``.
+    log_format : str, optional
+        Format string used when creating an internal logger. Defaults to
+        ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
+    logger : Logger or None, optional
+        Custom logger instance. When provided, ``log_file`` and ``log_format``
+        are ignored. Defaults to ``None``.
+
+    Raises
+    ------
+    ValueError
+        If AWS credentials are missing both in ``credentials`` and in
+        environment variables.
+    TypeError
+        If ``ssh_key`` has an invalid structure or no valid SSH keys are found.
+    ImportError
+        If required AWS SDK packages are not installed.
+    """
+
     def __init__(
         self,
         ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
@@ -215,47 +253,6 @@ class ProxyManagerAws(BaseProxyManager[AwsProxy]):
         log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
         logger: Logger | None = None,
     ):
-        """Create a manager that provisions AWS EC2 proxy instances.
-
-        This initializer validates AWS credentials and SSH key input,
-        configures logging, imports AWS SDK clients, and loads available
-        regions and size mappings used by the manager.
-
-        Parameters
-        ----------
-        ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
-            SSH key configuration for created instances. Accepted forms are a
-            single public key string, a dict with
-            ``{'name': ..., 'public_key': ...}``, a list mixing both forms,
-            or a file path containing one public key per line.
-        credentials : dict[str, str] or None, optional
-            AWS credential configuration. Supported keys are
-            ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY``. When omitted,
-            environment variables are used. Defaults to ``None``.
-        log : bool, optional
-            Enable logging for manager actions. Defaults to ``True``.
-        log_file : str or None, optional
-            File path for logging output. If None, logging output goes to
-            the terminal. Defaults to ``None``.
-        log_format : str, optional
-            Format string used when creating an internal logger. Defaults to
-            ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
-        logger : Logger or None, optional
-            Custom logger instance. When provided, ``log_file`` and
-            ``log_format`` are ignored. Defaults to ``None``.
-
-        Raises
-        ------
-        ValueError
-            If AWS credentials are missing both in ``credentials`` and in
-            environment variables.
-        TypeError
-            If ``ssh_key`` has an invalid structure or no valid SSH keys are
-            found.
-        ImportError
-            If required AWS SDK packages are not installed.
-        """
-
         credentials = credentials or {}
         if (
             not credentials

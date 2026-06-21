@@ -34,6 +34,52 @@ DIGITALOCEAN_TIMEOUT = 15
 
 
 class DigitalOceanProxy(BaseProxy):
+    """Represent a DigitalOcean droplet-based proxy instance.
+
+    This object stores proxy metadata and lifecycle state, and can be
+    initialized either for a newly created droplet or by reloading an existing
+    one.
+
+    Parameters
+    ----------
+    id : int
+        DigitalOcean droplet ID.
+    name : str
+        Droplet name.
+    ip : str
+        Public IP address of the droplet. Can be empty while the droplet is
+        still provisioning.
+    port : int
+        Proxy listening port.
+    region : str
+        Region slug where the droplet is deployed.
+    token : str
+        DigitalOcean API token used for management requests.
+    active : bool, optional
+        Whether the droplet is already active on DigitalOcean at initialization
+        time. Defaults to ``False``.
+    is_async : bool, optional
+        If True, do not wait for full startup before returning. Defaults to
+        ``False``.
+    user : str, optional
+        Basic-auth username configured for the proxy. Defaults to ``''``.
+    password : str, optional
+        Basic-auth password configured for the proxy. Defaults to ``''``.
+    logger : logging.Logger or None, optional
+        Logger used for status and lifecycle messages. Defaults to ``None``.
+    reload : bool, optional
+        If True, treat this instance as already initialized and skip startup
+        activation checks. Defaults to ``False``.
+    on_exit : {'keep', 'destroy'}, optional
+        Behavior when the proxy is closed: keep the droplet or destroy it.
+        Defaults to ``'destroy'``.
+
+    Raises
+    ------
+    ValueError
+        If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
+    """
+
     def __init__(
         self,
         id: int,
@@ -50,53 +96,6 @@ class DigitalOceanProxy(BaseProxy):
         reload: bool = False,
         on_exit: Literal["keep", "destroy"] = "destroy",
     ):
-        """Represent a DigitalOcean droplet-based proxy instance.
-
-        This object stores proxy metadata and lifecycle state, and can be
-        initialized either for a newly created droplet or by reloading an
-        existing one.
-
-        Parameters
-        ----------
-        id : int
-            DigitalOcean droplet ID.
-        name : str
-            Droplet name.
-        ip : str
-            Public IP address of the droplet. Can be empty while the droplet
-            is still provisioning.
-        port : int
-            Proxy listening port.
-        region : str
-            Region slug where the droplet is deployed.
-        token : str
-            DigitalOcean API token used for management requests.
-        active : bool, optional
-            Whether the droplet is already active on DigitalOcean at
-            initialization time. Defaults to ``False``.
-        is_async : bool, optional
-            If True, do not wait for full startup before returning. Defaults
-            to ``False``.
-        user : str, optional
-            Basic-auth username configured for the proxy. Defaults to ``''``.
-        password : str, optional
-            Basic-auth password configured for the proxy. Defaults to ``''``.
-        logger : logging.Logger or None, optional
-            Logger used for status and lifecycle messages. Defaults to
-            ``None``.
-        reload : bool, optional
-            If True, treat this instance as already initialized and skip
-            startup activation checks. Defaults to ``False``.
-        on_exit : {'keep', 'destroy'}, optional
-            Behavior when the proxy is closed: keep the droplet or destroy it.
-            Defaults to ``'destroy'``.
-
-        Raises
-        ------
-        ValueError
-            If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
-        """
-
         self.id = id
         self.name = name
         self.ip = ip
@@ -215,6 +214,77 @@ class DigitalOceanProxy(BaseProxy):
 
 @ProxyManagers.register(CloudProvider.DIGITALOCEAN)
 class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
+    """Manager that provisions DigitalOcean proxy droplets on demand.
+
+    This class validates API access, loads available regions and sizes, ensures
+    a target project exists, and registers/creates SSH keys for newly created
+    droplets.
+
+    Parameters
+    ----------
+    ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
+        SSH key configuration used for new droplets. Accepted forms are a single
+        public key string, a dict with ``{'name': ..., 'public_key': ...}``, a
+        list mixing both forms, or a file path containing one public key per
+        line.
+    project_name : str, optional
+        Name of the DigitalOcean project used to group managed proxies.
+        Defaults to ``'AutoProxyVPN'``.
+    project_description : str, optional
+        Description for the DigitalOcean project if it needs to be created.
+        Defaults to ``'On demand proxies'``.
+    token : str, optional
+        DigitalOcean API token. If empty, the value is read from the
+        ``DIGITALOCEAN_API_TOKEN`` environment variable. Defaults to ``''``.
+    log : bool, optional
+        Enable logging for manager actions. Defaults to ``True``.
+    log_file : str or None, optional
+        File path for logging output. If ``None``, logs are emitted to the
+        terminal. Defaults to ``None``.
+    log_format : str, optional
+        Format string used by ``logging`` when an internal logger is created.
+        Defaults to ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
+    logger : logging.Logger or None, optional
+        Custom logger instance. When provided, ``log_file`` and ``log_format``
+        are ignored. Defaults to ``None``.
+
+    Raises
+    ------
+    ValueError
+        If no API token is provided through ``token`` or
+        ``DIGITALOCEAN_API_TOKEN``.
+    ConnectionRefusedError
+        If the provided DigitalOcean token is invalid.
+    ConnectionError
+        If DigitalOcean API validation cannot be completed.
+
+    Examples
+    --------
+    Use environment token with a context manager::
+
+        proxy_manager = ProxyManagerDigitalOcean(
+            ssh_key='dummy existing key'
+        )
+        with proxy_manager.get_proxy() as proxy:
+            result = requests.get('https://google.com', proxies=proxy.get_proxy())
+
+    Pass token explicitly and close manually::
+
+        proxy_manager = ProxyManagerDigitalOcean(
+            ssh_key={
+                'name': 'dummy_key',
+                'public_key': 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...',
+            },
+            token='dop_v1_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+        )
+        proxy = proxy_manager.get_proxy()
+        try:
+            # Use the proxy
+            pass
+        finally:
+            proxy.close()
+    """
+
     def __init__(
         self,
         ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
@@ -226,76 +296,6 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
         logger: logging.Logger | None = None,
     ):
-        """Create a manager that provisions DigitalOcean proxy droplets on demand.
-
-        The manager validates API access, loads available regions and sizes,
-        ensures a target project exists, and registers/creates SSH keys for
-        newly created droplets.
-
-        Parameters
-        ----------
-        ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
-            SSH key configuration used for new droplets. Accepted forms are a
-            single public key string, a dict with
-            ``{'name': ..., 'public_key': ...}``, a list mixing both forms,
-            or a file path containing one public key per line.
-        project_name : str, optional
-            Name of the DigitalOcean project used to group managed proxies.
-            Defaults to ``'AutoProxyVPN'``.
-        project_description : str, optional
-            Description for the DigitalOcean project if it needs to be
-            created. Defaults to ``'On demand proxies'``.
-        token : str, optional
-            DigitalOcean API token. If empty, the value is read from the
-            ``DIGITALOCEAN_API_TOKEN`` environment variable. Defaults to
-            ``''``.
-        log : bool, optional
-            Enable logging for manager actions. Defaults to ``True``.
-        log_file : str or None, optional
-            File path for logging output. If ``None``, logs are emitted to
-            the terminal. Defaults to ``None``.
-        log_format : str, optional
-            Format string used by ``logging`` when an internal logger is
-            created. Defaults to
-            ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
-        logger : logging.Logger or None, optional
-            Custom logger instance. When provided, ``log_file`` and
-            ``log_format`` are ignored. Defaults to ``None``.
-
-        Raises
-        ------
-        ValueError
-            If no API token is provided through ``token`` or
-            ``DIGITALOCEAN_API_TOKEN``.
-        ConnectionRefusedError
-            If the provided DigitalOcean token is invalid.
-        ConnectionError
-            If DigitalOcean API validation cannot be completed.
-
-        Examples
-        --------
-        Use environment token with a context manager::
-
-            proxy_manager = ProxyManagerDigitalOcean(
-                ssh_key='dummy existing key'
-            )
-            with proxy_manager.get_proxy() as proxy:
-                result = requests.get('https://google.com', proxies=proxy.get_proxy())
-
-        Pass token explicitly and close manually::
-
-            proxy_manager = ProxyManagerDigitalOcean(
-                ssh_key={'name': 'dummy_key', 'public_key': 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...'},
-                token='dop_v1_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-            )
-            proxy = proxy_manager.get_proxy()
-            try:
-                # Use the proxy
-                pass
-            finally:
-                proxy.close()
-        """
-
         if isinstance(ssh_key, Path):
             ssh_key = str(ssh_key)
 

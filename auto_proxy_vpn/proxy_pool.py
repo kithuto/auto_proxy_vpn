@@ -10,24 +10,25 @@ from auto_proxy_vpn.utils.base_proxy import BaseProxyManager, BaseProxy, ProxyBa
 
 
 class RandomManagerPicker:
+    """Round-robin random picker for proxy managers.
+
+    The picker keeps a shuffled "bag" of manager instances and returns one
+    manager at a time via :meth:`next`. Once the bag is empty, it is refilled
+    and shuffled again. This guarantees each manager is selected at most once
+    per cycle while still randomizing the order between cycles.
+
+    Parameters
+    ----------
+    managers : list[tuple[CloudProvider, BaseProxyManager]]
+        List of manager instances.
+
+    Notes
+    -----
+    - Selection is random per cycle, not weighted.
+    - If only one manager is provided, it is always returned.
+    """
+
     def __init__(self, managers: list[tuple[CloudProvider, BaseProxyManager]]):
-        """Round-robin random picker for proxy managers.
-
-        The picker keeps a shuffled "bag" of manager instances and returns one
-        manager at a time via :meth:`next`. Once the bag is empty, it is refilled
-        and shuffled again. This guarantees each manager is selected at most once
-        per cycle while still randomizing the order between cycles.
-
-        Parameters
-        ----------
-        managers : list[tuple[CloudProvider, BaseProxyManager]]
-            List of manager instances.
-
-        Notes
-        -----
-        - Selection is random per cycle, not weighted.
-        - If only one manager is provided, it is always returned.
-        """
         self._managers: list[tuple[CloudProvider, BaseProxyManager]] = managers
         self._bag = []
         self._refill_bag()
@@ -63,6 +64,47 @@ class ProxyPool:
     - Duplicate providers are not allowed.
     - At most one configuration per provider is accepted.
     - Manager-specific validation is delegated to each provider manager.
+
+    Parameters
+    ----------
+    *provider_configs : tuple[BaseConfig, ...]
+        One or more provider-specific configuration objects.
+    log : bool, optional
+        Enable logging for manager runtime. Defaults to ``True``.
+    log_file : str | None, optional
+        Path to a log file. If ``None``, logging goes to the default handler.
+    log_format : str, optional
+        Format string used when configuring logging.
+    logger : Logger | None, optional
+        Shared logger instance passed to all managers.
+
+    Raises
+    ------
+    ValueError
+        If no providers are supplied, if providers contain duplicates, or if
+        provider configurations are duplicated by provider.
+
+    Examples
+    --------
+    Single provider with config::
+
+        from auto_proxy_vpn import ProxyPool, GoogleConfig
+        google_config = GoogleConfig(project='my-google-project', ssh_key='ssh_keys')
+        pool = ProxyPool(google_config)
+        batch = pool.create_batch(3)
+        for proxy in batch:
+            print(proxy)
+        batch.close()
+
+    Multiple providers with shared logger::
+
+        from auto_proxy_vpn import ProxyPool, GoogleConfig, AzureConfig
+        google_config = GoogleConfig(project='my-google-project', ssh_key='ssh_keys')
+        azure_config = AzureConfig(ssh_key='ssh_keys')
+        pool = ProxyPool(google_config, azure_config)
+        with pool.create_one() as proxy:
+            # do something with the proxy
+            pass
     """
 
     def __init__(
@@ -73,59 +115,6 @@ class ProxyPool:
         log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
         logger: Logger | None = None,
     ):
-        """Build a proxy pool and initialize provider managers. Supports multiple
-        accounts per provider by passing multiple configurations. To be able to use multiple
-        managers for the same provider the credentials must be different, otherwise an error
-        will be raised since the managers would be indistinguishable.
-
-        Parameters
-        ----------
-        *provider_configs : tuple[BaseConfig, ...]
-            One or more provider-specific configuration objects.
-
-            Example::
-
-                # will create 4 managers (2 google managers with different accounts)
-                ProxyPool(GoogleConfig(...), AzureConfig(...), GoogleConfig(credentials='credentials_2.json', ...), DigitalOceanConfig(...))
-        log : bool, optional
-            Enable logging for manager runtime. Defaults to ``True``.
-        log_file : str | None, optional
-            Path to a log file. If ``None``, logging goes to the default handler.
-        log_format : str, optional
-            Format string used when configuring logging.
-        logger : Logger | None, optional
-            Shared logger instance passed to all managers.
-
-        Raises
-        ------
-        ValueError
-            If no providers are supplied, if providers contain duplicates, or
-            if provider configurations are duplicated by provider.
-
-        Examples
-        --------
-        Single provider with config::
-
-            from auto_proxy_vpn import ProxyPool, GoogleConfig
-            google_config = GoogleConfig(project='my-google-project', ssh_key='ssh_keys')
-            pool = ProxyPool(google_config)
-            batch = pool.create_batch(3)
-            for proxy in batch:
-                print(proxy)
-            batch.close()
-
-        Multiple providers with shared logger::
-
-            from auto_proxy_vpn import ProxyPool, CloudProvider, GoogleConfig, AzureConfig
-            google_config = GoogleConfig(project='my-google-project', ssh_key='ssh_keys')
-            azure_config = AzureConfig(ssh_key='ssh_keys')
-            pool = ProxyPool(google_config, azure_config)
-            with pool.create_one() as proxy:
-                # do something with the proxy
-                pass
-
-        """
-
         self.managers: list[tuple[CloudProvider, BaseProxyManager]] = []
         self._check_provider_configs(provider_configs)
         self._initialize_managers(provider_configs, log, log_file, log_format, logger)

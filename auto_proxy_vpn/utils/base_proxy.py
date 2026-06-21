@@ -131,41 +131,41 @@ class BaseProxy(ABC):
 
 
 class ProxyBatch(Generic[T]):
+    """Container for a group of proxies with iteration and lifecycle control.
+
+    The batch shuffles the incoming proxies on creation to avoid predictable
+    ordering. It behaves as an iterable and iterator, supports indexing, and can
+    be used as a context manager to ensure all proxies are closed when the batch
+    is no longer needed.
+
+    Parameters
+    ----------
+    proxies : list[BaseProxy]
+        Proxies included in the batch.
+
+    Notes
+    -----
+    - Once closed, most operations raise ``RuntimeError``.
+    - Make sure to call ``close()`` when done to release resources if not using
+      a context manager.
+
+    Examples
+    --------
+    Context manager usage:
+
+    >>> with pool.create_batch(3) as batch:
+    ...     for proxy in batch:
+    ...         print(proxy)
+
+    Manual close:
+
+    >>> batch = pool.create_batch(3)
+    >>> for proxy in batch:
+    ...     print(proxy)
+    >>> batch.close()
+    """
+
     def __init__(self, proxies: list[T]):
-        """Container for a group of proxies with iteration and lifecycle control.
-
-        The batch shuffles the incoming proxies on creation to avoid predictable
-        ordering. It behaves as an iterable and iterator, supports indexing, and
-        can be used as a context manager to ensure all proxies are closed when the
-        batch is no longer needed.
-
-        Parameters
-        ----------
-        proxies : list[BaseProxy]
-            Proxies included in the batch.
-
-        Notes
-        -----
-        - Once closed, most operations raise ``RuntimeError``.
-        - Make sure to call ``close()`` when done to release resources if not
-          using a context manager.
-
-        Examples
-        --------
-        Context manager usage:
-
-        >>> with pool.create_batch(3) as batch:
-        ...     for proxy in batch:
-        ...         print(proxy)
-
-        Manual close:
-
-        >>> batch = pool.create_batch(3)
-        >>> for proxy in batch:
-        ...     print(proxy)
-        >>> batch.close()
-        """
-
         shuffle(proxies)
         self.proxies = proxies
         self._closed = False

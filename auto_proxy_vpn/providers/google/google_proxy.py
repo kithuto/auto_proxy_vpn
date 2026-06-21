@@ -29,6 +29,60 @@ from .google_utils import (
 
 
 class GoogleProxy(BaseProxy):
+    """Represent a Google Cloud VM-based proxy instance.
+
+    This object stores proxy metadata and lifecycle state, and can be
+    initialized either for a newly created instance or by reloading an existing
+    one.
+
+    Parameters
+    ----------
+    manager : ProxyManagerGoogle
+        Manager instance that owns the Google Compute clients used by this
+        proxy.
+    name : str
+        Google Compute Engine instance name.
+    ip : str
+        Public IP address of the proxy instance. Can be empty while the instance
+        is still starting.
+    port : int
+        Proxy listening port.
+    project : str
+        Google Cloud project ID where the instance exists.
+    region : str
+        Region of the proxy instance.
+    zone : str
+        Zone of the proxy instance.
+    proxy_instance : str, optional
+        Machine type used for the instance (for example ``'e2-micro'``).
+        Defaults to ``''``.
+    allowed_ips : list[str], optional
+        Allowed IPs/ranges. Defaults to an empty list.
+    is_async : bool, optional
+        If True, the proxy may be returned before full startup completion. If
+        the proxy is asynchronous on exit, it won't wait for full shutdown.
+        Defaults to ``False``.
+    user : str, optional
+        Basic-auth username configured for the proxy. Defaults to ``''``.
+    password : str, optional
+        Basic-auth password configured for the proxy. Defaults to ``''``.
+    logger : Logger or None, optional
+        Logger used for status and lifecycle messages. Defaults to ``None``.
+    reload : bool, optional
+        If True the proxy is already running and the object is being reloaded
+        with its info. In this case, the constructor will skip initial
+        activation checks for an already running instance. Defaults to
+        ``False``.
+    on_exit : {'keep', 'destroy'}, optional
+        Defines behavior when the proxy is closed: keep the cloud resource or
+        destroy it. Defaults to ``'destroy'``.
+
+    Raises
+    ------
+    ValueError
+        If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
+    """
+
     def __init__(
         self,
         manager: "ProxyManagerGoogle",
@@ -47,61 +101,6 @@ class GoogleProxy(BaseProxy):
         reload: bool = False,
         on_exit: Literal["keep", "destroy"] = "destroy",
     ):
-        """Represent a Google Cloud VM-based proxy instance.
-
-        This object stores proxy metadata and lifecycle state, and can be
-        initialized either for a newly created instance or by reloading an
-        existing one.
-
-        Parameters
-        ----------
-        manager : ProxyManagerGoogle
-            Manager instance that owns the Google Compute clients used by
-            this proxy.
-        name : str
-            Google Compute Engine instance name.
-        ip : str
-            Public IP address of the proxy instance. Can be empty while the
-            instance is still starting.
-        port : int
-            Proxy listening port.
-        project : str
-            Google Cloud project ID where the instance exists.
-        region : str
-            Region of the proxy instance.
-        zone : str
-            Zone of the proxy instance.
-        proxy_instance : str, optional
-            Machine type used for the instance (for example ``'e2-micro'``).
-            Defaults to ``''``.
-        allowed_ips : list[str], optional
-            Allowed IPs/ranges. Defaults to an empty list.
-        is_async : bool, optional
-            If True, the proxy may be returned before full startup completion.
-            If the proxy is asynchronous on exit, it won't wait for full
-            shutdown. Defaults to ``False``.
-        user : str, optional
-            Basic-auth username configured for the proxy. Defaults to ``''``.
-        password : str, optional
-            Basic-auth password configured for the proxy. Defaults to ``''``.
-        logger : Logger or None, optional
-            Logger used for status and lifecycle messages. Defaults to
-            ``None``.
-        reload : bool, optional
-            If True the proxy is already running and the object is being
-            reloaded with its info. In this case, the constructor will skip
-            initial activation checks for an already running instance.
-            Defaults to ``False``.
-        on_exit : {'keep', 'destroy'}, optional
-            Defines behavior when the proxy is closed: keep the cloud resource
-            or destroy it. Defaults to ``'destroy'``.
-
-        Raises
-        ------
-        ValueError
-            If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
-        """
-
         self.manager = manager
         self.name = name
         self.ip = ip
@@ -318,6 +317,73 @@ class GoogleProxy(BaseProxy):
 
 @ProxyManagers.register(CloudProvider.GOOGLE)
 class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
+    """Manager that provisions Google Cloud proxy instances on demand.
+
+    This class validates credentials, configures SSH keys and logging,
+    initializes Google Compute Engine clients, and loads available regions/zones
+    plus the latest Ubuntu image used for proxy instances.
+
+    Parameters
+    ----------
+    project : str
+        Google Cloud project ID where proxy instances are created.
+    ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
+        SSH key configuration for created instances, provided either as a
+        single public key string, a dictionary with keys
+        ``{'name': ..., 'public_key': ...}``, a list mixing both formats, or a
+        file path containing one public key per line.
+    credentials : str, optional
+        Path to a Google service-account JSON credentials file. Used only when
+        ``GOOGLE_APPLICATION_CREDENTIALS`` is not already set in the
+        environment. Defaults to ``''``.
+    log : bool, optional
+        Enable logging for manager actions. Defaults to ``True``.
+    log_file : str or None, optional
+        File path for logging output. If ``None``, logs are emitted to the
+        terminal. Defaults to ``None``.
+    log_format : str, optional
+        Format string used by ``logging`` when an internal logger is created.
+        Defaults to ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
+    logger : Logger or None, optional
+        Custom logger instance. When provided, ``log_file`` and ``log_format``
+        are ignored. Defaults to ``None``.
+
+    Raises
+    ------
+    GoogleAuthException
+        If credentials are required but neither ``GOOGLE_APPLICATION_CREDENTIALS``
+        nor ``credentials`` is provided.
+    TypeError
+        If ``ssh_key`` has an invalid structure or no valid SSH keys are found.
+    ImportError
+        If ``google-cloud-compute`` is not installed.
+
+    Examples
+    --------
+    Use environment-based credentials with a context manager::
+
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'my_google_credentials.json'
+        manager = ProxyManagerGoogle(
+            'my-google-project',
+            ssh_key='ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...'
+        )
+        with manager.get_proxy() as proxy:
+            result = requests.get('https://google.com', proxies=proxy.get_proxy())
+
+    Pass credentials explicitly and close manually::
+
+        manager = ProxyManagerGoogle(
+            'my-google-project',
+            credentials='my_google_credentials.json'
+        )
+        proxy = manager.get_proxy()
+        try:
+            # Use the proxy
+            pass
+        finally:
+            proxy.close()
+    """
+
     def __init__(
         self,
         ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
@@ -328,74 +394,6 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
         log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
         logger: Logger | None = None,
     ):
-        """Create a manager that provisions Google Cloud proxy instances on demand.
-
-        The manager validates credentials, configures SSH keys and logging,
-        initializes Google Compute Engine clients, and loads available
-        regions/zones plus the latest Ubuntu image used for proxy instances.
-
-        Parameters
-        ----------
-        project : str
-            Google Cloud project ID where proxy instances are created.
-        ssh_key : list[dict[str, str] | str] | dict[str, str] | str | Path
-            SSH key configuration for created instances, provided either as a
-            single public key string, a dictionary with keys
-            ``{'name': ..., 'public_key': ...}``, a list mixing both formats,
-            or a file path containing one public key per line.
-        credentials : str, optional
-            Path to a Google service-account JSON credentials file. Used only
-            when ``GOOGLE_APPLICATION_CREDENTIALS`` is not already set in the
-            environment. Defaults to ``''``.
-        log : bool, optional
-            Enable logging for manager actions. Defaults to ``True``.
-        log_file : str or None, optional
-            File path for logging output. If ``None``, logs are emitted to
-            the terminal. Defaults to ``None``.
-        log_format : str, optional
-            Format string used by ``logging`` when an internal logger is
-            created. Defaults to
-            ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
-        logger : Logger or None, optional
-            Custom logger instance. When provided, ``log_file`` and
-            ``log_format`` are ignored. Defaults to ``None``.
-
-        Raises
-        ------
-        GoogleAuthException
-            If credentials are required but neither
-            ``GOOGLE_APPLICATION_CREDENTIALS`` nor ``credentials`` is provided.
-        TypeError
-            If ``ssh_key`` has an invalid structure or no valid SSH keys are found.
-        ImportError
-            If ``google-cloud-compute`` is not installed.
-
-        Examples
-        --------
-        Use environment-based credentials with a context manager::
-
-            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'my_google_credentials.json'
-            manager = ProxyManagerGoogle(
-                'my-google-project',
-                ssh_key='ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC2...'
-            )
-            with manager.get_proxy() as proxy:
-                result = requests.get('https://google.com', proxies=proxy.get_proxy())
-
-        Pass credentials explicitly and close manually::
-
-            manager = ProxyManagerGoogle(
-                'my-google-project',
-                credentials='my_google_credentials.json'
-            )
-            proxy = manager.get_proxy()
-            try:
-                # Use the proxy
-                pass
-            finally:
-                proxy.close()
-        """
-
         credentials_file = environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
         if not credentials_file and not credentials:
             raise GoogleAuthException(

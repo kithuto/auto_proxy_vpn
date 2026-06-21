@@ -1,23 +1,18 @@
 class CountryNotAvailableException(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    """Raised when a requested country or region is unavailable."""
 
 
 class ProxyIpNotAvailableException(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    """Raised when a proxy has no usable public IP address."""
 
 
 class ProxyAuthRequiredError(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    """Raised when recovering an authenticated proxy without credentials."""
 
 
 class ProxyAuthenticationError(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    """Raised when provided proxy recovery credentials do not match."""
 
 
 class UnsupportedLegacyProxyAuthError(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    """Raised when an authenticated proxy lacks supported secure metadata."""
