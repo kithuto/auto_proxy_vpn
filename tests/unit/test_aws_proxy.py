@@ -9,6 +9,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from auto_proxy_vpn.configs import ManagerRuntimeConfig
+from auto_proxy_vpn.utils.exceptions import (
+    ProxyAuthenticationError,
+    ProxyAuthRequiredError,
+)
+from tests.conftest import make_auth_metadata_comment
 
 
 VALID_SSH_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQAwsUnitTestKeyMaterial"
@@ -482,10 +487,12 @@ class TestProxyManagerAwsReloadAndList:
         }
         sdk["boto3"].client.return_value = client
 
-        squid_cfg = """http_port 3128
-acl custom_ips src 1.2.3.4
-#auth credentials: user: u1, password: p1
-"""
+        squid_cfg = (
+            "http_port 3128\n"
+            "acl custom_ips src 1.2.3.4\n"
+            f"{make_auth_metadata_comment('u1', 'p1')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
+        )
 
         with patch.object(
             mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]
@@ -496,11 +503,56 @@ acl custom_ips src 1.2.3.4
                     "auto_proxy_vpn.providers.aws.aws_proxy.AwsProxy.is_active",
                     return_value=True,
                 ):
-                    proxy = mgr.get_proxy_by_name("proxy1", is_async=True)
+                    proxy = mgr.get_proxy_by_name(
+                        "proxy1",
+                        auth={"user": "u1", "password": "p1"},
+                        is_async=True,
+                    )
 
         assert proxy.port == 3128
         assert proxy.user == "u1"
         assert proxy.password == "p1"
+
+    @pytest.mark.parametrize(
+        ("auth", "exception"),
+        [
+            (None, ProxyAuthRequiredError),
+            ({"user": "u1", "password": "wrong"}, ProxyAuthenticationError),
+        ],
+    )
+    def test_get_proxy_by_name_auth_errors(self, auth, exception):
+        mgr, sdk = _build_aws_manager()
+
+        client = MagicMock()
+        client.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-1",
+                            "NetworkInterfaces": [{"Groups": [{"GroupId": "sg-1"}]}],
+                            "PublicIpAddress": "54.0.0.1",
+                            "InstanceType": "t3.micro",
+                        }
+                    ]
+                }
+            ]
+        }
+        sdk["boto3"].client.return_value = client
+
+        squid_cfg = (
+            "http_port 3128\n"
+            f"{make_auth_metadata_comment('u1', 'p1')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
+        )
+
+        with patch.object(
+            mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]
+        ):
+            with patch("auto_proxy_vpn.providers.aws.aws_proxy.SSHClient") as ssh_cls:
+                ssh_cls.return_value.run_command.return_value = ("", squid_cfg, "")
+                with pytest.raises(exception):
+                    mgr.get_proxy_by_name("proxy1", auth=auth)
 
     def test_get_proxy_by_name_logs_reload_info(self):
         mgr, sdk = _build_aws_manager()

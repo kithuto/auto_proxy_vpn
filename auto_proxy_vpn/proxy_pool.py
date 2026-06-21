@@ -193,9 +193,9 @@ class ProxyPool:
         self,
         port: int = 0,
         size: Literal["small", "medium", "large"] = "medium",
-        region: dict[CloudProvider, str] = {},
-        auth: dict[Literal["user", "password"], str] = {},
-        allowed_ips: str | list[str] = [],
+        region: dict[CloudProvider, str] | None = None,
+        auth: dict[Literal["user", "password"], str] | None = None,
+        allowed_ips: str | list[str] | None = None,
         is_async: bool = False,
         retry: bool = True,
         proxy_name: str = "",
@@ -230,6 +230,7 @@ class ProxyPool:
             The created proxy instance.
         """
 
+        region = region or {}
         cloud_provider, manager = self.random_manager_picker.next()
         return manager.get_proxy(
             port,
@@ -249,10 +250,11 @@ class ProxyPool:
         ports: list[int] | int = 0,
         sizes: list[Literal["small", "medium", "large"]]
         | Literal["small", "medium", "large"] = "medium",
-        regions: dict[CloudProvider, list[str] | str] = {},
+        regions: dict[CloudProvider, list[str] | str] | None = None,
         auths: list[dict[Literal["user", "password"], str]]
-        | dict[Literal["user", "password"], str] = {},
-        allowed_ips: list[str] | str = [],
+        | dict[Literal["user", "password"], str]
+        | None = None,
+        allowed_ips: list[str] | str | None = None,
         is_async: bool = True,
         retry: bool = True,
         proxy_names: list[str] | str = "",
@@ -278,6 +280,7 @@ class ProxyPool:
         proxies, the resulting batch may contain fewer proxies than requested.
         """
 
+        regions = regions or {}
         base = count // len(self.managers)
         remainder = count % len(self.managers)
 

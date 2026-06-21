@@ -22,13 +22,19 @@ class BaseProxy(ABC):
     active: bool
     is_async: bool
 
-    def get_proxy_str(self) -> str:
+    def get_proxy_str(self, redact_auth: bool = False) -> str:
         """
         Returns the url of the proxy. Empty string if no public IP yet.
         """
         if not self.ip:
             return ""
-        return f"http://{f'{self.user}:{self.password}@' if self.user else ''}{self.ip}:{self.port}"
+        if not self.user:
+            auth = ""
+        elif redact_auth:
+            auth = "***:***@"
+        else:
+            auth = f"{self.user}:{self.password}@"
+        return f"http://{auth}{self.ip}:{self.port}"
 
     def get_proxy(self) -> Optional[dict[str, str]]:
         """
@@ -53,8 +59,8 @@ class BaseProxy(ABC):
                 raise ProxyIpNotAvailableException("Couldn't get the proxy IP address!")
             if self.is_async and not wait:
                 try:
-                    assert get_public_ip(timeout=10, proxy=self.get_proxy()) == self.ip
-                    self.active = True
+                    if get_public_ip(timeout=10, proxy=self.get_proxy()) == self.ip:
+                        self.active = True
                 except Exception:
                     pass
                 return self.active
@@ -62,10 +68,8 @@ class BaseProxy(ABC):
                 times = 0
                 while not self.active and times < 40:
                     try:
-                        assert (
-                            get_public_ip(timeout=10, proxy=self.get_proxy()) == self.ip
-                        )
-                        self.active = True
+                        if get_public_ip(timeout=10, proxy=self.get_proxy()) == self.ip:
+                            self.active = True
                     except OSError as e:
                         if (
                             "Tunnel connection failed: 407 Proxy Authentication Required"
@@ -96,7 +100,7 @@ class BaseProxy(ABC):
         ...
 
     def __str__(self):
-        return f"Proxy {self.name} {self.get_proxy_str()} {'(active)' if self.active else '(inactive)'}"
+        return f"Proxy {self.name} {self.get_proxy_str(redact_auth=True)} {'(active)' if self.active else '(inactive)'}"
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -248,8 +252,8 @@ class BaseProxyManager(ABC, Generic[T]):
         port: int = 0,
         size: Literal["small", "medium", "large"] = "medium",
         region: str = "",
-        auth: dict[Literal["user", "password"], str] = {},
-        allowed_ips: str | list[str] = [],
+        auth: dict[Literal["user", "password"], str] | None = None,
+        allowed_ips: str | list[str] | None = None,
         is_async: bool = False,
         retry: bool = True,
         proxy_name: str = "",
@@ -260,6 +264,7 @@ class BaseProxyManager(ABC, Generic[T]):
     def get_proxy_by_name(
         self,
         name: str,
+        auth: dict[Literal["user", "password"], str] | None = None,
         is_async: bool = False,
         on_exit: Literal["destroy", "keep"] = "destroy",
     ) -> T: ...
@@ -272,8 +277,9 @@ class BaseProxyManager(ABC, Generic[T]):
         | Literal["small", "medium", "large"] = "medium",
         regions: list[str] | str = "",
         auths: list[dict[Literal["user", "password"], str]]
-        | dict[Literal["user", "password"], str] = {},
-        allowed_ips: list[str] | str = [],
+        | dict[Literal["user", "password"], str]
+        | None = None,
+        allowed_ips: list[str] | str | None = None,
         is_async: bool = True,
         retry: bool = True,
         proxy_names: list[str] | str = "",
@@ -326,6 +332,9 @@ class BaseProxyManager(ABC, Generic[T]):
             If any of the auth dicts does not have the keys 'user' and
             'password'.
         """
+
+        if auths is None:
+            auths = {}
 
         # check if the variables of instance list has the same length as the number of proxies to create, if not, raise an error
         if isinstance(ports, list) and len(ports) != number:
@@ -407,7 +416,10 @@ class BaseProxyManager(ABC, Generic[T]):
                     on_exit=on_exit,
                 )
             except Exception:
-                continue
+                logger = getattr(self, "logger", None)
+                if logger:
+                    logger.exception("Failed to create proxy in batch.")
+                raise
             proxies.append(proxy)
 
         return ProxyBatch[T](proxies)

@@ -8,6 +8,8 @@ from re import search
 from auto_proxy_vpn.utils.files_utils import get_squid_file
 from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
 
+DIGITALOCEAN_TIMEOUT = 15
+
 
 def get_or_create_project(name: str, description: str, headers: dict[str, str]) -> str:
     """
@@ -15,7 +17,9 @@ def get_or_create_project(name: str, description: str, headers: dict[str, str]) 
     """
     try:
         projects = get(
-            "https://api.digitalocean.com/v2/projects", headers=headers, timeout=15
+            "https://api.digitalocean.com/v2/projects",
+            headers=headers,
+            timeout=DIGITALOCEAN_TIMEOUT,
         )
     except Exception:
         raise ConnectionError("Error connecting to DigitalOcean.")
@@ -37,6 +41,7 @@ def get_or_create_project(name: str, description: str, headers: dict[str, str]) 
                     "https://api.digitalocean.com/v2/projects",
                     headers=headers,
                     json=data_proxy,
+                    timeout=DIGITALOCEAN_TIMEOUT,
                 ).json()["project"]
             ]
 
@@ -45,6 +50,7 @@ def get_or_create_project(name: str, description: str, headers: dict[str, str]) 
             "https://api.digitalocean.com/v2/projects/" + project_id[0]["id"],
             headers=headers,
             json=data,
+            timeout=DIGITALOCEAN_TIMEOUT,
         ).json()["project"]["id"]
     else:
         project_id = project_id[0]["id"]
@@ -70,7 +76,9 @@ def get_or_create_ssh_keys(
         raise TypeError("Bad ssh_key")
 
     all_ssh_keys = get(
-        "https://api.digitalocean.com/v2/account/keys", headers=headers
+        "https://api.digitalocean.com/v2/account/keys",
+        headers=headers,
+        timeout=DIGITALOCEAN_TIMEOUT,
     ).json()["ssh_keys"]
 
     keys = []
@@ -88,6 +96,7 @@ def get_or_create_ssh_keys(
                     "https://api.digitalocean.com/v2/account/keys",
                     headers=headers,
                     json=item,
+                    timeout=DIGITALOCEAN_TIMEOUT,
                 ).json()
                 key = key["ssh_key"]["id"]
             else:
@@ -148,6 +157,7 @@ def get_next_droplet_name(
         droplets = get(
             f"https://api.digitalocean.com/v2/droplets?tag_name={'proxy' if not is_vpn else 'vpn'}",
             headers=headers,
+            timeout=DIGITALOCEAN_TIMEOUT,
         ).json()["droplets"]
     except Exception:
         raise ConnectionError("Error connecting to DigitalOcean.")
@@ -180,7 +190,7 @@ def start_proxy(
     headers: dict[str, str],
     regions: list[str],
     logger: Optional[Logger],
-    allowed_ips: list[str] = [],
+    allowed_ips: list[str] | None = None,
     user: str = "",
     password: str = "",
     is_async: bool = False,
@@ -239,6 +249,7 @@ def start_proxy(
         fallback remains).
     """
 
+    allowed_ips = allowed_ips or []
     image_commands = get_squid_file(
         port, user, password, allowed_ips, ssh_keys=ssh_keys
     )
@@ -254,7 +265,10 @@ def start_proxy(
     }
 
     new_droplet = post(
-        "https://api.digitalocean.com/v2/droplets", headers=headers, json=data
+        "https://api.digitalocean.com/v2/droplets",
+        headers=headers,
+        json=data,
+        timeout=DIGITALOCEAN_TIMEOUT,
     )
 
     if new_droplet.status_code != 202:
@@ -330,6 +344,7 @@ def start_proxy(
                     "https://api.digitalocean.com/v2/droplets/"
                     + str(new_droplet["id"]),
                     headers=headers,
+                    timeout=DIGITALOCEAN_TIMEOUT,
                 ).json()["droplet"]
                 error = False
             except Exception:

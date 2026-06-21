@@ -76,7 +76,6 @@ class TestSSHClient:
                 client.download_file("/tmp/a.txt", "./a.txt")
 
         mock_run.assert_called_once_with(
-            "scp root@1.2.3.4:/tmp/a.txt ./a.txt",
-            shell=True,
+            ["scp", "root@1.2.3.4:/tmp/a.txt", "./a.txt"],
             capture_output=True,
         )

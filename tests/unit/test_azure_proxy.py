@@ -5,6 +5,11 @@ from unittest.mock import patch, MagicMock
 from types import SimpleNamespace
 
 from auto_proxy_vpn.configs import AzureConfig, ManagerRuntimeConfig
+from auto_proxy_vpn.utils.exceptions import (
+    ProxyAuthenticationError,
+    ProxyAuthRequiredError,
+)
+from tests.conftest import make_auth_metadata_comment
 
 
 VALID_SSH_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQAzureUnitTestKeyMaterial"
@@ -986,7 +991,8 @@ class TestProxyManagerAzureGetProxyByName:
         squid_conf = (
             "http_port 3128\n"
             "acl custom_ips src 1.1.1.1\n"
-            "#auth credentials: user: alice, password: secret\n"
+            f"{make_auth_metadata_comment('alice', 'secret')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
         )
 
         with patch("auto_proxy_vpn.providers.azure.azure_proxy.SSHClient") as mock_ssh:
@@ -994,7 +1000,12 @@ class TestProxyManagerAzureGetProxyByName:
             with patch(
                 "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.5"
             ):
-                proxy = mgr.get_proxy_by_name("proxy1", is_async=True, on_exit="keep")
+                proxy = mgr.get_proxy_by_name(
+                    "proxy1",
+                    auth={"user": "alice", "password": "secret"},
+                    is_async=True,
+                    on_exit="keep",
+                )
 
         assert proxy.name == "proxy1"
         assert proxy.port == 3128
@@ -1002,6 +1013,41 @@ class TestProxyManagerAzureGetProxyByName:
         assert proxy.password == "secret"
         assert proxy.allowed_ips == ["1.1.1.1"]
         assert proxy.destroy is False
+
+    @pytest.mark.parametrize(
+        ("auth", "exception"),
+        [
+            (None, ProxyAuthRequiredError),
+            ({"user": "alice", "password": "wrong"}, ProxyAuthenticationError),
+        ],
+    )
+    def test_get_proxy_by_name_auth_errors(self, auth, exception):
+        mgr, sdk = _build_azure_manager()
+
+        rg = MagicMock()
+        rg.name = "proxy1"
+        rg.tags = {"type": "proxy"}
+        sdk["resource_client"].resource_groups.list.return_value = [rg]
+
+        instance = MagicMock()
+        instance.location = "eastus"
+        instance.hardware_profile = SimpleNamespace(vm_size="Standard_B1s")
+        sdk["compute_client"].virtual_machines.get.return_value = instance
+
+        pip = MagicMock()
+        pip.ip_address = "40.0.0.5"
+        sdk["network_client"].public_ip_addresses.get.return_value = pip
+
+        squid_conf = (
+            "http_port 3128\n"
+            f"{make_auth_metadata_comment('alice', 'secret')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
+        )
+
+        with patch("auto_proxy_vpn.providers.azure.azure_proxy.SSHClient") as mock_ssh:
+            mock_ssh.return_value.run_command.return_value = (0, squid_conf, "")
+            with pytest.raises(exception):
+                mgr.get_proxy_by_name("proxy1", auth=auth)
 
     def test_get_proxy_by_name_missing_ip_raises(self):
         mgr, sdk = _build_azure_manager()

@@ -16,6 +16,12 @@ from types import SimpleNamespace
 from pathlib import Path
 import builtins
 
+from auto_proxy_vpn.utils.exceptions import (
+    ProxyAuthenticationError,
+    ProxyAuthRequiredError,
+)
+from tests.conftest import make_auth_metadata_comment
+
 
 # ---------------------------------------------------------------------------
 # Helpers — mock the google-cloud-compute SDK
@@ -1241,7 +1247,8 @@ class TestProxyManagerGoogleGetProxyByName:
             "http_port 3128\n"
             "acl custom_ips src 10.0.0.1\n"
             "acl custom_ips src 10.0.0.2\n"
-            "#auth credentials: user: alice, password: secret\n"
+            f"{make_auth_metadata_comment('alice', 'secret')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
         )
 
         metadata_item = SimpleNamespace(key="startup-script", value=startup_script)
@@ -1267,7 +1274,12 @@ class TestProxyManagerGoogleGetProxyByName:
             return_value="35.10.10.10",
         ):
             with patch.object(GoogleProxy, "is_active", return_value=True):
-                proxy = mgr.get_proxy_by_name("proxy1", on_exit="keep", is_async=True)
+                proxy = mgr.get_proxy_by_name(
+                    "proxy1",
+                    auth={"user": "alice", "password": "secret"},
+                    on_exit="keep",
+                    is_async=True,
+                )
 
         assert proxy.name == "proxy1"
         assert proxy.ip == "35.10.10.10"
@@ -1276,6 +1288,42 @@ class TestProxyManagerGoogleGetProxyByName:
         assert proxy.password == "secret"
         assert proxy.allowed_ips == ["10.0.0.1", "10.0.0.2"]
         assert proxy.destroy is False
+
+    @pytest.mark.parametrize(
+        ("auth", "exception"),
+        [
+            (None, ProxyAuthRequiredError),
+            ({"user": "alice", "password": "wrong"}, ProxyAuthenticationError),
+        ],
+    )
+    def test_get_proxy_by_name_auth_errors(self, auth, exception):
+        mgr, clients = _build_google_manager()
+
+        startup_script = (
+            "http_port 3128\n"
+            f"{make_auth_metadata_comment('alice', 'secret')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
+        )
+        metadata_item = SimpleNamespace(key="startup-script", value=startup_script)
+        proxy_info = SimpleNamespace(
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.10")])
+            ],
+            metadata=SimpleNamespace(items=[metadata_item]),
+            zone="projects/test/zones/us-central1-a",
+            machine_type="projects/test/zones/us-central1-a/machineTypes/e2-micro",
+        )
+
+        class _AggResp:
+            def __init__(self, instances):
+                self.instances = instances
+
+        clients["instances_client"].aggregated_list.return_value = [
+            ("zones/us-central1-a", _AggResp([proxy_info])),
+        ]
+
+        with pytest.raises(exception):
+            mgr.get_proxy_by_name("proxy1", auth=auth)
 
     def test_get_proxy_by_name_logs_when_logger_present(self):
         mgr, clients = _build_google_manager()

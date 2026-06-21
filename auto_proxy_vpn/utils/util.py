@@ -1,5 +1,5 @@
 from requests import get, RequestException
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network
 from typing import Optional
 
 IP_SERVICES = [
@@ -37,3 +37,16 @@ def is_ssh_key(key: str) -> bool:
         key.startswith(("ssh-", "ecdsa-", "sk-ssh-", "sk-ecdsa-"))
         and len(key.split()) >= 2
     )
+
+
+def normalize_allowed_ips(allowed_ips: str | list[str] | None) -> list[str]:
+    if not allowed_ips:
+        return []
+
+    ips = [allowed_ips] if isinstance(allowed_ips, str) else list(allowed_ips)
+    for ip in ips:
+        try:
+            ip_network(ip, strict=False)
+        except ValueError as exc:
+            raise TypeError("IPs or ranges of ips with bad format!") from exc
+    return ips

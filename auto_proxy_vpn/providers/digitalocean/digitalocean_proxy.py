@@ -15,6 +15,10 @@ from auto_proxy_vpn import (
     DigitalOceanConfig,
 )
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
+from auto_proxy_vpn.utils.proxy_auth import (
+    normalize_proxy_auth,
+    resolve_reloaded_proxy_auth,
+)
 from .digitalocean_utils import (
     get_or_create_project,
     get_servers_and_size,
@@ -23,8 +27,10 @@ from .digitalocean_utils import (
 )
 from .digitalocean_exceptions import DropletNotProxyException
 from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
-from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key
+from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key, normalize_allowed_ips
 from auto_proxy_vpn.utils.ssh_client import SSHClient
+
+DIGITALOCEAN_TIMEOUT = 15
 
 
 class DigitalOceanProxy(BaseProxy):
@@ -118,7 +124,9 @@ class DigitalOceanProxy(BaseProxy):
         if self.logger:
             if not reload:
                 proxy_suffix = (
-                    f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                    f" {self.get_proxy_str(redact_auth=True)}"
+                    if self.get_proxy_str()
+                    else ""
                 )
                 status = "and ready to use" if self.active else "but not active yet"
                 self.logger.info(
@@ -126,7 +134,9 @@ class DigitalOceanProxy(BaseProxy):
                 )
             else:
                 proxy_suffix = (
-                    f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                    f" {self.get_proxy_str(redact_auth=True)}"
+                    if self.get_proxy_str()
+                    else ""
                 )
                 status = "active" if self.active else "inactive"
                 self.logger.info(
@@ -140,6 +150,7 @@ class DigitalOceanProxy(BaseProxy):
                     droplet = get(
                         "https://api.digitalocean.com/v2/droplets/" + str(self.id),
                         headers=self._headers,
+                        timeout=DIGITALOCEAN_TIMEOUT,
                     ).json()["droplet"]
                     self._digitalocean_active = droplet["status"] == "active"
                     if self._digitalocean_active:
@@ -157,6 +168,7 @@ class DigitalOceanProxy(BaseProxy):
                         droplet = get(
                             "https://api.digitalocean.com/v2/droplets/" + str(self.id),
                             headers=self._headers,
+                            timeout=DIGITALOCEAN_TIMEOUT,
                         ).json()["droplet"]
                         self._digitalocean_active = droplet["status"] == "active"
                         if self._digitalocean_active:
@@ -179,10 +191,11 @@ class DigitalOceanProxy(BaseProxy):
         response = delete(
             "https://api.digitalocean.com/v2/droplets/" + str(self.id),
             headers=self._headers,
+            timeout=DIGITALOCEAN_TIMEOUT,
         )
         if self.logger:
             self.logger.info(
-                f"DigitalOcean proxy{' ' + self.get_proxy_str() if self.get_proxy_str() else ''}{' already' if response.status_code > 300 else ''} removed."
+                f"DigitalOcean proxy{' ' + self.get_proxy_str(redact_auth=True) if self.get_proxy_str() else ''}{' already' if response.status_code > 300 else ''} removed."
             )
 
         self.stopped = True
@@ -333,7 +346,9 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
 
         try:
             do_regions_resp = get(
-                "https://api.digitalocean.com/v2/regions", headers=self._headers
+                "https://api.digitalocean.com/v2/regions",
+                headers=self._headers,
+                timeout=DIGITALOCEAN_TIMEOUT,
             )
         except Exception:
             raise ConnectionError("Error connecting to DigitalOcean.")
@@ -390,8 +405,8 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         port: int = 0,
         size: Literal["small", "medium", "large"] = "medium",
         region: str = "",
-        auth: dict[Literal["user", "password"], str] = {},
-        allowed_ips: str | list[str] = [],
+        auth: dict[Literal["user", "password"], str] | None = None,
+        allowed_ips: str | list[str] | None = None,
         is_async: bool = False,
         retry: bool = True,
         proxy_name: str = "",
@@ -454,32 +469,17 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         elif not region:
             region = choice(servers)
 
-        if auth:
-            if not isinstance(auth, dict):
-                raise TypeError("Bad auth format, auth must be a dict")
+        auth = normalize_proxy_auth(auth)
 
-            if "user" not in auth.keys() or "password" not in auth.keys():
-                raise KeyError("Auth dict must have two keys name and password")
-
-        if allowed_ips:
-            if isinstance(allowed_ips, str):
-                allowed_ips = [allowed_ips]
-
-            if not all(
-                search(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?", ip)
-                for ip in allowed_ips
-            ):
-                raise TypeError("IPs or ranges of ips with bad format!")
-        else:
+        allowed_ips = normalize_allowed_ips(allowed_ips)
+        if not allowed_ips:
             try:
                 allowed_ips = [get_public_ip()]
             except Exception:
                 allowed_ips = []
 
         if self.logger:
-            user_suffix = (
-                f" for the user {auth['user']}" if auth else " with no authentification"
-            )
+            user_suffix = " with authentication" if auth else " with no authentication"
             self.logger.info(
                 f"Starting a new DigitalOcean proxy in the region {region}{user_suffix}..."
             )
@@ -523,6 +523,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
     def get_proxy_by_name(
         self,
         name: str,
+        auth: dict[Literal["user", "password"], str] | None = None,
         is_async: bool = False,
         on_exit: Literal["destroy", "keep"] = "destroy",
     ) -> DigitalOceanProxy:
@@ -562,6 +563,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             droplets = get(
                 f"https://api.digitalocean.com/v2/droplets?name={name}&type=droplets",
                 headers=self._headers,
+                timeout=DIGITALOCEAN_TIMEOUT,
             ).json()["droplets"]
         except Exception:
             raise ConnectionError("Error searching for the droplet!")
@@ -584,19 +586,11 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             raise DropletNotProxyException("This droplet isn't a proxxy!")
         port = int(port_search.group(1))
 
-        auth_search = search(
-            r"#auth credentials: user: (.+), password: (.+)\n", proxy_file
-        )
-        auth = {}
-        if auth_search:
-            auth["user"] = auth_search.group(1)
-            auth["password"] = auth_search.group(2)
+        auth = resolve_reloaded_proxy_auth(proxy_file, auth)
 
         if self.logger:
             user_suffix = (
-                f" for the user {auth['user']}"
-                if auth
-                else " with no authentification found"
+                " with authentication" if auth else " with no authentication found"
             )
             self.logger.info(
                 f"DigitalOcean proxy {name} reloaded with IP {public_ip} and port {port}{user_suffix}"
@@ -623,6 +617,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             droplets = get(
                 "https://api.digitalocean.com/v2/droplets?tag_name=proxy",
                 headers=self._headers,
+                timeout=DIGITALOCEAN_TIMEOUT,
             ).json()["droplets"]
         except Exception:
             raise ConnectionError("Error connecting to DigitalOcean.")

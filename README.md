@@ -364,7 +364,11 @@ print(proxy.name)   # "proxy1"
 proxy.close()       # resources are NOT deleted
 
 # Later session — reconnect
-proxy = manager.get_proxy_by_name("proxy1", on_exit="destroy")
+proxy = manager.get_proxy_by_name(
+    "proxy1",
+    auth={"user": "alice", "password": "secret"},  # only needed for auth proxies
+    on_exit="destroy",
+)
 ```
 
 List all running proxies:

@@ -21,15 +21,17 @@ class SSHClient:
         self.ip = ip
         self.user = user
         # No strict host key Checking if strict = False
-        self.ssh_command = (
-            f"ssh{' -o StrictHostKeyChecking=no' if not strict else ''} {user}@{ip}"
-        )
+        self.ssh_args = ["ssh"]
+        if not strict:
+            self.ssh_args.extend(["-o", "StrictHostKeyChecking=no"])
+        self.ssh_args.append(f"{user}@{ip}")
+        self.ssh_command = " ".join(self.ssh_args)
 
     def connect(self):
         """
         Checks server ssh connection
         """
-        result = run(f'{self.ssh_command} "echo OK"', shell=True, capture_output=True)
+        result = run([*self.ssh_args, "echo OK"], capture_output=True)
         stdout = result.stdout.decode()
         if "OK" in stdout:
             self.active = True
@@ -58,7 +60,7 @@ class SSHClient:
         if not self.connect():
             raise ConnectionError("Can't connect to the server!")
 
-        result = run(f'{self.ssh_command} "{command}"', shell=True, capture_output=True)
+        result = run([*self.ssh_args, command], capture_output=True)
 
         return result.returncode, result.stdout.decode(), result.stderr.decode()
 
@@ -88,7 +90,6 @@ class SSHClient:
             raise ConnectionError("Can't connect to the server!")
 
         _ = run(
-            f"scp {self.user}@{self.ip}:{file} {destination_file}",
-            shell=True,
+            ["scp", f"{self.user}@{self.ip}:{file}", destination_file],
             capture_output=True,
         )

@@ -25,6 +25,17 @@ from auto_proxy_vpn.configs import (
     ManagerRuntimeConfig,
 )
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager, ProxyBatch
+from auto_proxy_vpn.utils.proxy_auth import (
+    format_proxy_auth_metadata_comment,
+    hash_proxy_password,
+)
+
+
+def make_auth_metadata_comment(user: str, password: str) -> str:
+    return format_proxy_auth_metadata_comment(
+        user,
+        hash_proxy_password(password, salt=b"0" * 32, iterations=1),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -85,8 +96,8 @@ class StubProxyManager(BaseProxyManager[StubProxy]):
         port=0,
         size="medium",
         region="",
-        auth={},
-        allowed_ips=[],
+        auth=None,
+        allowed_ips=None,
         is_async=False,
         retry=True,
         proxy_name="",
@@ -96,7 +107,7 @@ class StubProxyManager(BaseProxyManager[StubProxy]):
         self._get_proxy_calls.append(call)
         return StubProxy(name=f"{self.label}-proxy-{len(self._get_proxy_calls)}")
 
-    def get_proxy_by_name(self, name, is_async=False, on_exit="destroy"):
+    def get_proxy_by_name(self, name, auth=None, is_async=False, on_exit="destroy"):
         return StubProxy(name=name)
 
     def get_running_proxy_names(self):

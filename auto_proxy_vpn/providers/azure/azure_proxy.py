@@ -14,7 +14,11 @@ from auto_proxy_vpn import (
     AzureConfig,
 )
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
-from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key
+from auto_proxy_vpn.utils.proxy_auth import (
+    normalize_proxy_auth,
+    resolve_reloaded_proxy_auth,
+)
+from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key, normalize_allowed_ips
 from auto_proxy_vpn.utils.ssh_client import SSHClient
 from .azure_utils import start_proxy
 
@@ -28,7 +32,7 @@ class AzureProxy(BaseProxy):
         port: int,
         region: str,
         proxy_instance: str = "",
-        allowed_ips: list[str] = [],
+        allowed_ips: list[str] | None = None,
         is_async: bool = False,
         user: str = "",
         password: str = "",
@@ -92,7 +96,7 @@ class AzureProxy(BaseProxy):
         self.port = port
         self.region = region
         self.proxy_instance = proxy_instance
-        self.allowed_ips = allowed_ips
+        self.allowed_ips = allowed_ips or []
         self.is_async = is_async
         self.user = user
         self.password = password
@@ -110,13 +114,17 @@ class AzureProxy(BaseProxy):
         if self.logger:
             if not reload:
                 proxy_suffix = (
-                    f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                    f" {self.get_proxy_str(redact_auth=True)}"
+                    if self.get_proxy_str()
+                    else ""
                 )
                 status = "and ready to use" if self.active else "but not active yet"
                 self.logger.info(f"New Azure proxy{proxy_suffix} created {status}.")
             else:
                 proxy_suffix = (
-                    f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                    f" {self.get_proxy_str(redact_auth=True)}"
+                    if self.get_proxy_str()
+                    else ""
                 )
                 status = "active" if self.active else "inactive"
                 self.logger.info(f"Azure proxy{proxy_suffix} reloaded and {status}.")
@@ -196,12 +204,12 @@ class AzureProxy(BaseProxy):
 
             if self.logger:
                 self.logger.info(
-                    f"Azure proxy{' ' + self.get_proxy_str() if self.get_proxy_str() else ''} removed."
+                    f"Azure proxy{' ' + self.get_proxy_str(redact_auth=True) if self.get_proxy_str() else ''} removed."
                 )
         else:
             if self.logger:
                 self.logger.info(
-                    f"Azure proxy{' ' + self.get_proxy_str() if self.get_proxy_str() else ''} kept as per on_exit='keep' setting."
+                    f"Azure proxy{' ' + self.get_proxy_str(redact_auth=True) if self.get_proxy_str() else ''} kept as per on_exit='keep' setting."
                 )
 
         self.stopped = True
@@ -462,8 +470,8 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
         port: int = 0,
         size: Literal["small", "medium", "large"] = "medium",
         region: str = "",
-        auth: dict[Literal["user", "password"], str] = {},
-        allowed_ips: str | list[str] = [],
+        auth: dict[Literal["user", "password"], str] | None = None,
+        allowed_ips: str | list[str] | None = None,
         is_async: bool = False,
         retry: bool = True,
         proxy_name: str = "",
@@ -565,35 +573,17 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             shuffle(servers)
             region = choice(servers)
 
-        if auth:
-            if not isinstance(auth, dict):
-                raise TypeError("Bad auth format, auth must be a dict")
-
-            if "user" not in auth.keys() or "password" not in auth.keys():
-                raise KeyError("Auth dict must have two keys name and password")
+        auth = normalize_proxy_auth(auth)
 
         ip = get_public_ip()
 
-        ips = []
-        if allowed_ips:
-            if isinstance(allowed_ips, str):
-                ips = [allowed_ips]
-            else:
-                ips = allowed_ips
-
-            if not all(
-                search(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?", ip)
-                for ip in ips
-            ):
-                raise TypeError("IPs or ranges of ips with bad format!")
+        ips = normalize_allowed_ips(allowed_ips)
 
         if ip not in ips:
             ips.append(ip)
 
         if self.logger:
-            user_suffix = (
-                f" for the user {auth['user']}" if auth else " with no authentification"
-            )
+            user_suffix = " with authentication" if auth else " with no authentication"
             self.logger.info(
                 f"Starting a new azure proxy in the region {region}{user_suffix}..."
             )
@@ -661,6 +651,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
     def get_proxy_by_name(
         self,
         name: str,
+        auth: dict[Literal["user", "password"], str] | None = None,
         is_async: bool = False,
         on_exit: Literal["destroy", "keep"] = "destroy",
     ) -> AzureProxy:
@@ -732,27 +723,21 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
         vm_size = instance.hardware_profile.vm_size
 
         # Search IPs in the squid config file to get the allowed ips for the proxy
-        allowed_ips = [
-            str(match.group(1))
-            for match in finditer(
-                r"acl custom_ips src (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})",
-                startup_script,
-            )
-        ]
-
-        auth_search = search(
-            r"#auth credentials: user: (.+), password: (.+)\n", startup_script
+        allowed_ips = normalize_allowed_ips(
+            [
+                str(match.group(1))
+                for match in finditer(
+                    r"acl custom_ips src (\S+)",
+                    startup_script,
+                )
+            ]
         )
-        auth = {}
-        if auth_search:
-            auth["user"] = auth_search.group(1)
-            auth["password"] = auth_search.group(2)
+
+        auth = resolve_reloaded_proxy_auth(startup_script, auth)
 
         if self.logger:
             user_suffix = (
-                f" for the user {auth['user']}"
-                if auth
-                else " with no authentification found"
+                " with authentication" if auth else " with no authentication found"
             )
             self.logger.info(
                 f"Azure proxy {name} reloaded with IP {ip} and port {port}{user_suffix}..."

@@ -7,8 +7,16 @@ import responses
 from responses import matchers
 
 from auto_proxy_vpn.configs import ManagerRuntimeConfig
-from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
-from tests.conftest import make_do_regions_response, make_do_droplet
+from auto_proxy_vpn.utils.exceptions import (
+    CountryNotAvailableException,
+    ProxyAuthenticationError,
+    ProxyAuthRequiredError,
+)
+from tests.conftest import (
+    make_auth_metadata_comment,
+    make_do_droplet,
+    make_do_regions_response,
+)
 
 
 DO_API = "https://api.digitalocean.com/v2"
@@ -660,7 +668,9 @@ class TestProxyManagerDigitalOceanGetProxyByName:
         mgr = ProxyManagerDigitalOcean.from_config(digitalocean_config, runtime)
 
         squid_conf = (
-            "http_port 3128\n#auth credentials: user: alice, password: secret\n"
+            "http_port 3128\n"
+            f"{make_auth_metadata_comment('alice', 'secret')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
         )
 
         with patch(
@@ -671,13 +681,58 @@ class TestProxyManagerDigitalOceanGetProxyByName:
                 "auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.DigitalOceanProxy.is_active",
                 return_value=True,
             ):
-                proxy = mgr.get_proxy_by_name("proxy-a", is_async=True, on_exit="keep")
+                proxy = mgr.get_proxy_by_name(
+                    "proxy-a",
+                    auth={"user": "alice", "password": "secret"},
+                    is_async=True,
+                    on_exit="keep",
+                )
 
         assert proxy.name == "proxy-a"
         assert proxy.port == 3128
         assert proxy.user == "alice"
         assert proxy.password == "secret"
         assert proxy.destroy is False
+
+    @responses.activate
+    @pytest.mark.parametrize(
+        ("auth", "exception"),
+        [
+            (None, ProxyAuthRequiredError),
+            ({"user": "alice", "password": "wrong"}, ProxyAuthenticationError),
+        ],
+    )
+    def test_reload_auth_errors(self, digitalocean_config, auth, exception):
+        _register_common_do_mocks()
+        droplet = make_do_droplet(10, "proxy-a", ip="8.8.4.4", status="active")
+        responses.add(
+            responses.GET,
+            f"{DO_API}/droplets",
+            match=[
+                matchers.query_param_matcher({"name": "proxy-a", "type": "droplets"})
+            ],
+            json={"droplets": [droplet]},
+            status=200,
+        )
+
+        runtime = ManagerRuntimeConfig(log=False)
+        from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import (
+            ProxyManagerDigitalOcean,
+        )
+
+        mgr = ProxyManagerDigitalOcean.from_config(digitalocean_config, runtime)
+        squid_conf = (
+            "http_port 3128\n"
+            f"{make_auth_metadata_comment('alice', 'secret')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
+        )
+
+        with patch(
+            "auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.SSHClient"
+        ) as mock_ssh:
+            mock_ssh.return_value.run_command.return_value = (0, squid_conf, "")
+            with pytest.raises(exception):
+                mgr.get_proxy_by_name("proxy-a", auth=auth)
 
     @responses.activate
     def test_reload_without_squid_conf_raises_connection_error(

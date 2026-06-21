@@ -42,6 +42,12 @@ class TestBaseProxyStr:
         assert "stub-proxy" in s
         assert "1.2.3.4" in s
 
+    def test_str_redacts_auth(self, stub_proxy_with_auth):
+        s = str(stub_proxy_with_auth)
+        assert "s3cret" not in s
+        assert "admin" not in s
+        assert "***:***" in s
+
     def test_repr_equals_str(self, stub_proxy):
         assert repr(stub_proxy) == str(stub_proxy)
 
