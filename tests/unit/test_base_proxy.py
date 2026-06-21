@@ -12,6 +12,7 @@ from tests.conftest import StubProxy
 # BaseProxy
 # ============================================================================
 
+
 class TestBaseProxyStr:
     """Proxy string / URL generation."""
 
@@ -19,14 +20,19 @@ class TestBaseProxyStr:
         assert stub_proxy.get_proxy_str() == "http://1.2.3.4:12345"
 
     def test_get_proxy_str_with_auth(self, stub_proxy_with_auth):
-        assert stub_proxy_with_auth.get_proxy_str() == "http://admin:s3cret@1.2.3.4:12345"
+        assert (
+            stub_proxy_with_auth.get_proxy_str() == "http://admin:s3cret@1.2.3.4:12345"
+        )
 
     def test_get_proxy_str_empty_when_no_ip(self, inactive_proxy):
         assert inactive_proxy.get_proxy_str() == ""
 
     def test_get_proxy_returns_dict(self, stub_proxy):
         result = stub_proxy.get_proxy()
-        assert result == {"http": "http://1.2.3.4:12345", "https": "http://1.2.3.4:12345"}
+        assert result == {
+            "http": "http://1.2.3.4:12345",
+            "https": "http://1.2.3.4:12345",
+        }
 
     def test_get_proxy_returns_none_when_no_ip(self, inactive_proxy):
         assert inactive_proxy.get_proxy() is None
@@ -73,7 +79,9 @@ class TestBaseProxyIsActive:
         stub_proxy.active = False
         with patch(
             "auto_proxy_vpn.utils.base_proxy.get_public_ip",
-            side_effect=OSError("Tunnel connection failed: 407 Proxy Authentication Required"),
+            side_effect=OSError(
+                "Tunnel connection failed: 407 Proxy Authentication Required"
+            ),
         ):
             assert stub_proxy.is_active(wait=True) is False
 
@@ -122,6 +130,7 @@ class TestBaseProxyContextManager:
 # ============================================================================
 # ProxyBatch
 # ============================================================================
+
 
 class TestProxyBatch:
     """Tests for the ProxyBatch container."""
@@ -182,6 +191,7 @@ class TestProxyBatch:
 # BaseProxyManager — get_proxies validation
 # ============================================================================
 
+
 class TestBaseProxyManagerGetProxies:
     """Tests for parameter validation in BaseProxyManager.get_proxies."""
 
@@ -232,7 +242,9 @@ class TestBaseProxyManagerGetProxies:
 
     def test_invalid_auth_type_in_list_raises(self, stub_manager):
         with pytest.raises(TypeError, match="auth"):
-            stub_manager.get_proxies(2, auths=[{"user": "u", "password": "p"}, "bad-auth"])
+            stub_manager.get_proxies(
+                2, auths=[{"user": "u", "password": "p"}, "bad-auth"]
+            )
 
     def test_auth_missing_keys_raises(self, stub_manager):
         with pytest.raises(KeyError, match="two keys"):

@@ -8,29 +8,42 @@ from os import environ
 from os.path import isfile
 from pathlib import Path
 
-from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, DigitalOceanConfig
+from auto_proxy_vpn import (
+    CloudProvider,
+    ProxyManagers,
+    ManagerRuntimeConfig,
+    DigitalOceanConfig,
+)
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
-from .digitalocean_utils import get_or_create_project, get_or_create_ssh_keys, get_servers_and_size, start_proxy, get_next_droplet_name
+from .digitalocean_utils import (
+    get_or_create_project,
+    get_servers_and_size,
+    start_proxy,
+    get_next_droplet_name,
+)
 from .digitalocean_exceptions import DropletNotProxyException
 from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
 from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key
 from auto_proxy_vpn.utils.ssh_client import SSHClient
 
+
 class DigitalOceanProxy(BaseProxy):
-    def __init__(self,
-                 id: int,
-                 name: str,
-                 ip: str,
-                 port: int,
-                 region: str,
-                 token: str,
-                 active: bool = False,
-                 is_async: bool = False,
-                 user: str = '',
-                 password: str = '',
-                 logger: logging.Logger | None = None,
-                 reload: bool = False,
-                 on_exit: Literal['keep', 'destroy'] = 'destroy'):
+    def __init__(
+        self,
+        id: int,
+        name: str,
+        ip: str,
+        port: int,
+        region: str,
+        token: str,
+        active: bool = False,
+        is_async: bool = False,
+        user: str = "",
+        password: str = "",
+        logger: logging.Logger | None = None,
+        reload: bool = False,
+        on_exit: Literal["keep", "destroy"] = "destroy",
+    ):
         """Represent a DigitalOcean droplet-based proxy instance.
 
         This object stores proxy metadata and lifecycle state, and can be
@@ -77,7 +90,7 @@ class DigitalOceanProxy(BaseProxy):
         ValueError
             If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
         """
-        
+
         self.id = id
         self.name = name
         self.ip = ip
@@ -86,8 +99,8 @@ class DigitalOceanProxy(BaseProxy):
         self.user = user
         self.password = password
         self._headers = {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token,
         }
         self._digitalocean_active = active
         self.active = False
@@ -95,81 +108,111 @@ class DigitalOceanProxy(BaseProxy):
         self.log = True if logger else False
         self.logger = logger
         self.stopped = False
-        if on_exit not in ['keep', 'destroy']:
+        if on_exit not in ["keep", "destroy"]:
             raise ValueError("Bad on_exit option!")
-        self.destroy = True if on_exit == 'destroy' else False
-        
+        self.destroy = True if on_exit == "destroy" else False
+
         if not self.is_async and self.logger and not reload:
-            self.logger.info('Waitting for the DigitalOcean proxy to be set up...')
+            self.logger.info("Waitting for the DigitalOcean proxy to be set up...")
         self.active = self.is_active()
         if self.logger:
             if not reload:
-                proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                proxy_suffix = (
+                    f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                )
                 status = "and ready to use" if self.active else "but not active yet"
-                self.logger.info(f"New DigitalOcean proxy{proxy_suffix} created {status}.")
+                self.logger.info(
+                    f"New DigitalOcean proxy{proxy_suffix} created {status}."
+                )
             else:
-                proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                proxy_suffix = (
+                    f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                )
                 status = "active" if self.active else "inactive"
-                self.logger.info(f"DigitalOcean proxy{proxy_suffix} reloaded and {status}.")
-    
+                self.logger.info(
+                    f"DigitalOcean proxy{proxy_suffix} reloaded and {status}."
+                )
+
     def is_active(self, wait: bool = False) -> bool:
         if not self._digitalocean_active:
             if self.is_async and not wait:
                 try:
-                    droplet = get('https://api.digitalocean.com/v2/droplets/'+str(self.id), headers=self._headers).json()['droplet']
-                    self._digitalocean_active = droplet['status'] == 'active'
+                    droplet = get(
+                        "https://api.digitalocean.com/v2/droplets/" + str(self.id),
+                        headers=self._headers,
+                    ).json()["droplet"]
+                    self._digitalocean_active = droplet["status"] == "active"
                     if self._digitalocean_active:
-                        self.ip = [x for x in droplet['networks']['v4'] if x['type'] == 'public'][0]['ip_address']
-                except:
+                        self.ip = [
+                            x
+                            for x in droplet["networks"]["v4"]
+                            if x["type"] == "public"
+                        ][0]["ip_address"]
+                except Exception:
                     return self._digitalocean_active
             else:
                 times = 0
                 while (not self.ip or not self._digitalocean_active) and times < 10:
                     try:
-                        droplet = get('https://api.digitalocean.com/v2/droplets/'+str(self.id), headers=self._headers).json()['droplet']
-                        self._digitalocean_active = droplet['status'] == 'active'
+                        droplet = get(
+                            "https://api.digitalocean.com/v2/droplets/" + str(self.id),
+                            headers=self._headers,
+                        ).json()["droplet"]
+                        self._digitalocean_active = droplet["status"] == "active"
                         if self._digitalocean_active:
-                            self.ip = [x for x in droplet['networks']['v4'] if x['type'] == 'public'][0]['ip_address']
-                    except:
+                            self.ip = [
+                                x
+                                for x in droplet["networks"]["v4"]
+                                if x["type"] == "public"
+                            ][0]["ip_address"]
+                    except Exception:
                         times += 1
                         sleep(5)
             if not self._digitalocean_active:
                 return self._digitalocean_active
         return super().is_active(wait)
-        
+
     def _stop_proxy(self, wait: bool = True):
         if self.stopped or not self.destroy:
             return
-        
-        response = delete('https://api.digitalocean.com/v2/droplets/'+str(self.id), headers=self._headers)
+
+        response = delete(
+            "https://api.digitalocean.com/v2/droplets/" + str(self.id),
+            headers=self._headers,
+        )
         if self.logger:
-            self.logger.info(f"DigitalOcean proxy{' '+self.get_proxy_str() if self.get_proxy_str() else ''}{' already' if response.status_code > 300 else ''} removed.")
-        
+            self.logger.info(
+                f"DigitalOcean proxy{' ' + self.get_proxy_str() if self.get_proxy_str() else ''}{' already' if response.status_code > 300 else ''} removed."
+            )
+
         self.stopped = True
-        
+
         if response.status_code < 300:
             self.id = None
-            self.ip = ''
+            self.ip = ""
             self.port = 0
             self.region = None
-            self.user = ''
-            self.password = ''
+            self.user = ""
+            self.password = ""
             self._headers = None
 
     def __str__(self):
         return f"DigitalOcean p{super().__str__()[1:]}"
 
+
 @ProxyManagers.register(CloudProvider.DIGITALOCEAN)
 class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
-    def __init__(self,
-                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
-                 project_name: str = 'AutoProxyVPN',
-                 project_description: str = 'On demand proxies',
-                 token: str = '',
-                 log: bool = True,
-                 log_file: str | None = None,
-                 log_format: str = '%(asctime)-10s %(levelname)-5s %(message)s',
-                 logger: logging.Logger | None = None):
+    def __init__(
+        self,
+        ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
+        project_name: str = "AutoProxyVPN",
+        project_description: str = "On demand proxies",
+        token: str = "",
+        log: bool = True,
+        log_file: str | None = None,
+        log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
+        logger: logging.Logger | None = None,
+    ):
         """Create a manager that provisions DigitalOcean proxy droplets on demand.
 
         The manager validates API access, loads available regions and sizes,
@@ -239,76 +282,123 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             finally:
                 proxy.close()
         """
-        
+
         if isinstance(ssh_key, Path):
             ssh_key = str(ssh_key)
-        
+
         if isinstance(ssh_key, str) and isfile(ssh_key):
             with open(ssh_key, "r") as f:
-                ssh_key = [x.strip('\n') for x in f.readlines() if x.strip('\n')]
+                ssh_key = [x.strip("\n") for x in f.readlines() if x.strip("\n")]
         try:
-            ssh_key = [ssh_key] if isinstance(ssh_key, str) or isinstance(ssh_key, dict) else ssh_key
-            self.ssh_keys: list[str] = [x if not isinstance(x, dict) else x['public_key'] for x in ssh_key if isinstance(x, dict) or (isinstance(x, str) and is_ssh_key(x))] 
-        except:
-            raise TypeError("Bad ssh_key. SSH in a dict must follow format: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}")
+            ssh_key = (
+                [ssh_key]
+                if isinstance(ssh_key, str) or isinstance(ssh_key, dict)
+                else ssh_key
+            )
+            self.ssh_keys: list[str] = [
+                x if not isinstance(x, dict) else x["public_key"]
+                for x in ssh_key
+                if isinstance(x, dict) or (isinstance(x, str) and is_ssh_key(x))
+            ]
+        except Exception:
+            raise TypeError(
+                "Bad ssh_key. SSH in a dict must follow format: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}"
+            )
         if not self.ssh_keys:
-            raise TypeError("No valid ssh keys found in the provided ssh_key parameter!")
-        self.proxy_image = 'ubuntu-24-04-x64'
+            raise TypeError(
+                "No valid ssh keys found in the provided ssh_key parameter!"
+            )
+        self.proxy_image = "ubuntu-24-04-x64"
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
         self.logger = logger
         if self.log and not logger:
-            logging.basicConfig(filename=log_file,
-                    format=self.log_format,
-                    filemode='a',
-                    datefmt='%d-%b-%Y %H:%M:%S',
-                    level=logging.INFO)
-            self.logger = logging.getLogger('proxy_logger')
+            logging.basicConfig(
+                filename=log_file,
+                format=self.log_format,
+                filemode="a",
+                datefmt="%d-%b-%Y %H:%M:%S",
+                level=logging.INFO,
+            )
+            self.logger = logging.getLogger("proxy_logger")
         self._token = token if token else environ.get("DIGITALOCEAN_API_TOKEN", "")
         if not self._token:
-            raise ValueError("DigitalOcean token not provided! Please provide it as an argument or set the DIGITALOCEAN_API_TOKEN environment variable.")
+            raise ValueError(
+                "DigitalOcean token not provided! Please provide it as an argument or set the DIGITALOCEAN_API_TOKEN environment variable."
+            )
         self._headers = {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + self._token
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + self._token,
         }
-        
+
         try:
-            do_regions_resp = get('https://api.digitalocean.com/v2/regions', headers=self._headers)
-        except:
-            raise ConnectionError('Error connecting to DigitalOcean.')
+            do_regions_resp = get(
+                "https://api.digitalocean.com/v2/regions", headers=self._headers
+            )
+        except Exception:
+            raise ConnectionError("Error connecting to DigitalOcean.")
         if do_regions_resp.status_code == 401:
-            raise ConnectionRefusedError('Bad DigitalOcean token.')
+            raise ConnectionRefusedError("Bad DigitalOcean token.")
         elif do_regions_resp.status_code >= 400:
-            raise ConnectionError('Error connecting to DigitalOcean.')
-        
-        self._active_servers: list[dict] = [x for x in do_regions_resp.json()['regions'] if x['available']]
-        self._servers: list[str] = [x['slug'] for x in self._active_servers]
-        self._sizes_regions = {'small': [x['slug'] for x in self._active_servers if 's-1vcpu-512mb-10gb' in x['sizes']], 'medium': self._servers, 'large': self._servers}
-        
+            raise ConnectionError("Error connecting to DigitalOcean.")
+
+        self._active_servers: list[dict] = [
+            x for x in do_regions_resp.json()["regions"] if x["available"]
+        ]
+        self._servers: list[str] = [x["slug"] for x in self._active_servers]
+        self._sizes_regions = {
+            "small": [
+                x["slug"]
+                for x in self._active_servers
+                if "s-1vcpu-512mb-10gb" in x["sizes"]
+            ],
+            "medium": self._servers,
+            "large": self._servers,
+        }
+
         # setting the project id
-        self.project: str = get_or_create_project(project_name, project_description, self._headers)
-    
+        self.project: str = get_or_create_project(
+            project_name, project_description, self._headers
+        )
+
     @classmethod
-    def from_config(cls, config: DigitalOceanConfig | None = None, runtime_config: ManagerRuntimeConfig | None = None) -> 'ProxyManagerDigitalOcean':
+    def from_config(
+        cls,
+        config: DigitalOceanConfig | None = None,
+        runtime_config: ManagerRuntimeConfig | None = None,
+    ) -> "ProxyManagerDigitalOcean":
         """Create a ProxyManagerDigitalOcean instance from a DigitalOceanConfig object and a ManagerRuntimeConfig."""
         if config is None:
-            raise ValueError("DigitalOceanConfig must be provided to create a ProxyManagerDigitalOcean instance.")
+            raise ValueError(
+                "DigitalOceanConfig must be provided to create a ProxyManagerDigitalOcean instance."
+            )
         if runtime_config is None:
             runtime_config = ManagerRuntimeConfig()
-        return cls(config.ssh_key, config.project_name, config.project_description, config.token, runtime_config.log, runtime_config.log_file, runtime_config.log_format, runtime_config.logger)
-    
-    def get_proxy(self,
-                  port: int = 0,
-                  size: Literal['small', 'medium', 'large'] = 'medium',
-                  region: str = '',
-                  auth: dict[Literal['user', 'password'], str] = {},
-                  allowed_ips: str | list[str] = [],
-                  is_async: bool = False,
-                  retry: bool = True,
-                  proxy_name: str = '',
-                  on_exit: Literal['keep', 'destroy'] = 'destroy') -> DigitalOceanProxy:
-        '''Starts a new proxy in DigitalOcean with the given settings and returns a proxy object to manage it.
-        
+        return cls(
+            config.ssh_key,
+            config.project_name,
+            config.project_description,
+            config.token,
+            runtime_config.log,
+            runtime_config.log_file,
+            runtime_config.log_format,
+            runtime_config.logger,
+        )
+
+    def get_proxy(
+        self,
+        port: int = 0,
+        size: Literal["small", "medium", "large"] = "medium",
+        region: str = "",
+        auth: dict[Literal["user", "password"], str] = {},
+        allowed_ips: str | list[str] = [],
+        is_async: bool = False,
+        retry: bool = True,
+        proxy_name: str = "",
+        on_exit: Literal["keep", "destroy"] = "destroy",
+    ) -> DigitalOceanProxy:
+        """Starts a new proxy in DigitalOcean with the given settings and returns a proxy object to manage it.
+
         Parameters
         ----------
         port : int, optional
@@ -338,60 +428,104 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
             When the proxy is closed, ``'destroy'`` permanently removes it;
             otherwise it stays running and can be retrieved later with
             ``get_proxy_by_name``.
-            
+
         Returns
         -------
         DigitalOceanProxy
             :class:`DigitalOceanProxy` instance containing the new created
             proxy.
-        '''
-        
+        """
+
         retry = retry if not region else False
         proxy_name = get_next_droplet_name(self._headers, proxy_name)
-        
+
         if not port:
             port = randint(10000, 65000)
-        
-        proxy_size, servers = get_servers_and_size(size, self._active_servers, self._servers)
-        
+
+        proxy_size, servers = get_servers_and_size(
+            size, self._active_servers, self._servers
+        )
+
         shuffle(servers)
         if region and region not in servers:
-            raise CountryNotAvailableException("This country isn't avaliable in DigitalOcean for this size")
+            raise CountryNotAvailableException(
+                "This country isn't avaliable in DigitalOcean for this size"
+            )
         elif not region:
             region = choice(servers)
-        
+
         if auth:
             if not isinstance(auth, dict):
-                raise TypeError('Bad auth format, auth must be a dict')
-            
-            if 'user' not in auth.keys() or 'password' not in auth.keys():
-                raise KeyError('Auth dict must have two keys name and password')
-        
+                raise TypeError("Bad auth format, auth must be a dict")
+
+            if "user" not in auth.keys() or "password" not in auth.keys():
+                raise KeyError("Auth dict must have two keys name and password")
+
         if allowed_ips:
             if isinstance(allowed_ips, str):
                 allowed_ips = [allowed_ips]
-            
-            if not all(search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?', ip) for ip in allowed_ips):
+
+            if not all(
+                search(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?", ip)
+                for ip in allowed_ips
+            ):
                 raise TypeError("IPs or ranges of ips with bad format!")
         else:
             try:
                 allowed_ips = [get_public_ip()]
-            except:
+            except Exception:
                 allowed_ips = []
 
         if self.logger:
-            user_suffix = f" for the user {auth['user']}" if auth else " with no authentification"
-            self.logger.info(f"Starting a new DigitalOcean proxy in the region {region}{user_suffix}...")
-        
-        proxy_id, proxy_ip, error = start_proxy(proxy_name, self.proxy_image, region, proxy_size, port, self.ssh_keys, self._headers, servers, self.logger, allowed_ips, auth.get('user', ''), auth.get('password', ''), is_async, retry)
-        
+            user_suffix = (
+                f" for the user {auth['user']}" if auth else " with no authentification"
+            )
+            self.logger.info(
+                f"Starting a new DigitalOcean proxy in the region {region}{user_suffix}..."
+            )
+
+        proxy_id, proxy_ip, error = start_proxy(
+            proxy_name,
+            self.proxy_image,
+            region,
+            proxy_size,
+            port,
+            self.ssh_keys,
+            self._headers,
+            servers,
+            self.logger,
+            allowed_ips,
+            auth.get("user", ""),
+            auth.get("password", ""),
+            is_async,
+            retry,
+        )
+
         active = not error
         if not proxy_id:
-            raise ConnectionError('Error creating the proxy in DigitalOcean.')
-        
-        return DigitalOceanProxy(proxy_id, proxy_name, proxy_ip, port, region, self._token, active, is_async, auth.get('user', ''), auth.get('password', ''), self.logger, on_exit=on_exit)
-    
-    def get_proxy_by_name(self, name: str, is_async: bool = False, on_exit: Literal['destroy', 'keep'] = 'destroy') -> DigitalOceanProxy:
+            raise ConnectionError("Error creating the proxy in DigitalOcean.")
+
+        return DigitalOceanProxy(
+            proxy_id,
+            proxy_name,
+            proxy_ip,
+            port,
+            region,
+            self._token,
+            active,
+            is_async,
+            auth.get("user", ""),
+            auth.get("password", ""),
+            self.logger,
+            on_exit=on_exit,
+        )
+
+    def get_proxy_by_name(
+        self,
+        name: str,
+        is_async: bool = False,
+        on_exit: Literal["destroy", "keep"] = "destroy",
+    ) -> DigitalOceanProxy:
         """Gets a proxy instance by droplet name.
 
         Parameters
@@ -404,12 +538,12 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         on_exit : {'keep', 'destroy'}, optional
             Keep or destroy the proxy when the program ends. Defaults to
             ``'destroy'``.
-        
+
         Returns
         -------
         DigitalOceanProxy
             :class:`DigitalOceanProxy` instance of the proxy.
-        
+
         Raises
         ------
         ConnectionError
@@ -423,45 +557,74 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         ValueError
             Port or auth credentials not found in the Squid config.
         """
-        
+
         try:
-            droplets = get(f'https://api.digitalocean.com/v2/droplets?name={name}&type=droplets', headers=self._headers).json()['droplets']
-        except:
+            droplets = get(
+                f"https://api.digitalocean.com/v2/droplets?name={name}&type=droplets",
+                headers=self._headers,
+            ).json()["droplets"]
+        except Exception:
             raise ConnectionError("Error searching for the droplet!")
-        
+
         if not droplets:
             raise NameError(f"Proxy {name} doesn't exists!")
-        
+
         droplet = droplets[0]
-        public_ip = [x for x in droplet['networks']['v4'] if x['type'] == 'public'][0]['ip_address']
-        
-        ssh_client = SSHClient(public_ip, user='proxy-user')
-        _, proxy_file, _ = ssh_client.run_command('cat /etc/squid/squid.conf')
+        public_ip = [x for x in droplet["networks"]["v4"] if x["type"] == "public"][0][
+            "ip_address"
+        ]
+
+        ssh_client = SSHClient(public_ip, user="proxy-user")
+        _, proxy_file, _ = ssh_client.run_command("cat /etc/squid/squid.conf")
         if not proxy_file:
             raise ConnectionError("Can't connect to the proxy!")
-        
-        port_search = search(r'http_port (\d+)', proxy_file)
+
+        port_search = search(r"http_port (\d+)", proxy_file)
         if not port_search:
             raise DropletNotProxyException("This droplet isn't a proxxy!")
         port = int(port_search.group(1))
-        
-        auth_search = search(r'#auth credentials: user: (.+), password: (.+)\n', proxy_file)
+
+        auth_search = search(
+            r"#auth credentials: user: (.+), password: (.+)\n", proxy_file
+        )
         auth = {}
         if auth_search:
-            auth['user'] = auth_search.group(1)
-            auth['password'] = auth_search.group(2)
-            
+            auth["user"] = auth_search.group(1)
+            auth["password"] = auth_search.group(2)
+
         if self.logger:
-            user_suffix = f" for the user {auth['user']}" if auth else " with no authentification found"
-            self.logger.info(f"DigitalOcean proxy {name} reloaded with IP {public_ip} and port {port}{user_suffix}")
-        
-        return DigitalOceanProxy(droplet['id'], name, public_ip, port, droplet['region']['slug'], self._token, active=False, is_async=is_async, user=auth['user'] if auth else '', password=auth['password'] if auth else '', logger=self.logger, reload=True, on_exit=on_exit)
-    
+            user_suffix = (
+                f" for the user {auth['user']}"
+                if auth
+                else " with no authentification found"
+            )
+            self.logger.info(
+                f"DigitalOcean proxy {name} reloaded with IP {public_ip} and port {port}{user_suffix}"
+            )
+
+        return DigitalOceanProxy(
+            droplet["id"],
+            name,
+            public_ip,
+            port,
+            droplet["region"]["slug"],
+            self._token,
+            active=False,
+            is_async=is_async,
+            user=auth["user"] if auth else "",
+            password=auth["password"] if auth else "",
+            logger=self.logger,
+            reload=True,
+            on_exit=on_exit,
+        )
+
     def get_running_proxy_names(self) -> list[str]:
         try:
-            droplets = get('https://api.digitalocean.com/v2/droplets?tag_name=proxy', headers=self._headers).json()['droplets']
-        except:
-            raise ConnectionError('Error connecting to DigitalOcean.')
-        
-        return [x['name'] for x in droplets]
-        
+            droplets = get(
+                "https://api.digitalocean.com/v2/droplets?tag_name=proxy",
+                headers=self._headers,
+            ).json()["droplets"]
+        except Exception:
+            raise ConnectionError("Error connecting to DigitalOcean.")
+
+        return [x["name"] for x in droplets]

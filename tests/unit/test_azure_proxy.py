@@ -4,7 +4,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 from types import SimpleNamespace
 
-from auto_proxy_vpn import CloudProvider
 from auto_proxy_vpn.configs import AzureConfig, ManagerRuntimeConfig
 
 
@@ -14,6 +13,7 @@ VALID_SSH_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQAzureUnitTestKeyMaterial"
 # ---------------------------------------------------------------------------
 # Helpers — mock the Azure SDK
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_azure_sdk():
     """Build mocks for all Azure SDK dependencies."""
@@ -30,7 +30,10 @@ def _make_mock_azure_sdk():
     location2.display_name = "West Europe"
 
     subscription_client = MagicMock()
-    subscription_client.subscriptions.list_locations.return_value = [location1, location2]
+    subscription_client.subscriptions.list_locations.return_value = [
+        location1,
+        location2,
+    ]
 
     # Resource client
     resource_client = MagicMock()
@@ -72,21 +75,30 @@ def _build_azure_manager():
     """Create a ProxyManagerAzure with fully mocked SDK."""
     sdk = _make_mock_azure_sdk()
 
-    with patch.dict("sys.modules", {
-        "azure": MagicMock(),
-        "azure.identity": MagicMock(DefaultAzureCredential=sdk["DefaultAzureCredential"]),
-        "azure.mgmt": MagicMock(),
-        "azure.mgmt.subscription": MagicMock(SubscriptionClient=sdk["SubscriptionClient"]),
-        "azure.mgmt.resource": MagicMock(ResourceManagementClient=sdk["ResourceManagementClient"]),
-        "azure.mgmt.network": MagicMock(
-            NetworkManagementClient=sdk["NetworkManagementClient"],
-            models=sdk["network_models"],
-        ),
-        "azure.mgmt.compute": MagicMock(
-            ComputeManagementClient=sdk["ComputeManagementClient"],
-            models=sdk["compute_models"],
-        ),
-    }):
+    with patch.dict(
+        "sys.modules",
+        {
+            "azure": MagicMock(),
+            "azure.identity": MagicMock(
+                DefaultAzureCredential=sdk["DefaultAzureCredential"]
+            ),
+            "azure.mgmt": MagicMock(),
+            "azure.mgmt.subscription": MagicMock(
+                SubscriptionClient=sdk["SubscriptionClient"]
+            ),
+            "azure.mgmt.resource": MagicMock(
+                ResourceManagementClient=sdk["ResourceManagementClient"]
+            ),
+            "azure.mgmt.network": MagicMock(
+                NetworkManagementClient=sdk["NetworkManagementClient"],
+                models=sdk["network_models"],
+            ),
+            "azure.mgmt.compute": MagicMock(
+                ComputeManagementClient=sdk["ComputeManagementClient"],
+                models=sdk["compute_models"],
+            ),
+        },
+    ):
         with patch.dict("os.environ", {"AZURE_SUBSCRIPTION_ID": "fake-sub-id"}):
             from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
 
@@ -103,8 +115,8 @@ def _build_azure_manager():
 # ProxyManagerAzure — constructor
 # ============================================================================
 
-class TestProxyManagerAzureInit:
 
+class TestProxyManagerAzureInit:
     def test_creates_manager_with_mocked_sdk(self):
         mgr, _ = _build_azure_manager()
         assert hasattr(mgr, "_regions")
@@ -123,12 +135,51 @@ class TestProxyManagerAzureInit:
     def test_no_credentials_raises(self):
         with patch.dict("os.environ", {}, clear=True):
             sdk = _make_mock_azure_sdk()
-            with patch.dict("sys.modules", {
+            with patch.dict(
+                "sys.modules",
+                {
+                    "azure": MagicMock(),
+                    "azure.identity": MagicMock(
+                        DefaultAzureCredential=sdk["DefaultAzureCredential"]
+                    ),
+                    "azure.mgmt": MagicMock(),
+                    "azure.mgmt.subscription": MagicMock(
+                        SubscriptionClient=sdk["SubscriptionClient"]
+                    ),
+                    "azure.mgmt.resource": MagicMock(
+                        ResourceManagementClient=sdk["ResourceManagementClient"]
+                    ),
+                    "azure.mgmt.network": MagicMock(
+                        NetworkManagementClient=sdk["NetworkManagementClient"],
+                        models=sdk["network_models"],
+                    ),
+                    "azure.mgmt.compute": MagicMock(
+                        ComputeManagementClient=sdk["ComputeManagementClient"],
+                        models=sdk["compute_models"],
+                    ),
+                },
+            ):
+                from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+
+                with pytest.raises(ValueError, match="credentials not provided"):
+                    ProxyManagerAzure(ssh_key=VALID_SSH_KEY)
+
+    def test_no_valid_ssh_keys_found_raises(self):
+        sdk = _make_mock_azure_sdk()
+        with patch.dict(
+            "sys.modules",
+            {
                 "azure": MagicMock(),
-                "azure.identity": MagicMock(DefaultAzureCredential=sdk["DefaultAzureCredential"]),
+                "azure.identity": MagicMock(
+                    DefaultAzureCredential=sdk["DefaultAzureCredential"]
+                ),
                 "azure.mgmt": MagicMock(),
-                "azure.mgmt.subscription": MagicMock(SubscriptionClient=sdk["SubscriptionClient"]),
-                "azure.mgmt.resource": MagicMock(ResourceManagementClient=sdk["ResourceManagementClient"]),
+                "azure.mgmt.subscription": MagicMock(
+                    SubscriptionClient=sdk["SubscriptionClient"]
+                ),
+                "azure.mgmt.resource": MagicMock(
+                    ResourceManagementClient=sdk["ResourceManagementClient"]
+                ),
                 "azure.mgmt.network": MagicMock(
                     NetworkManagementClient=sdk["NetworkManagementClient"],
                     models=sdk["network_models"],
@@ -137,30 +188,11 @@ class TestProxyManagerAzureInit:
                     ComputeManagementClient=sdk["ComputeManagementClient"],
                     models=sdk["compute_models"],
                 ),
-            }):
-                from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
-                with pytest.raises(ValueError, match="credentials not provided"):
-                    ProxyManagerAzure(ssh_key=VALID_SSH_KEY)
-
-    def test_no_valid_ssh_keys_found_raises(self):
-        sdk = _make_mock_azure_sdk()
-        with patch.dict("sys.modules", {
-            "azure": MagicMock(),
-            "azure.identity": MagicMock(DefaultAzureCredential=sdk["DefaultAzureCredential"]),
-            "azure.mgmt": MagicMock(),
-            "azure.mgmt.subscription": MagicMock(SubscriptionClient=sdk["SubscriptionClient"]),
-            "azure.mgmt.resource": MagicMock(ResourceManagementClient=sdk["ResourceManagementClient"]),
-            "azure.mgmt.network": MagicMock(
-                NetworkManagementClient=sdk["NetworkManagementClient"],
-                models=sdk["network_models"],
-            ),
-            "azure.mgmt.compute": MagicMock(
-                ComputeManagementClient=sdk["ComputeManagementClient"],
-                models=sdk["compute_models"],
-            ),
-        }):
+            },
+        ):
             with patch.dict("os.environ", {"AZURE_SUBSCRIPTION_ID": "fake-sub-id"}):
                 from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+
                 with pytest.raises(TypeError, match="No valid ssh keys found"):
                     ProxyManagerAzure(
                         ssh_key=["invalid-key", "also-invalid"],
@@ -170,6 +202,7 @@ class TestProxyManagerAzureInit:
 
     def test_from_config_with_none_raises(self):
         from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+
         with pytest.raises(ValueError):
             ProxyManagerAzure.from_config(None, None)
 
@@ -178,25 +211,33 @@ class TestProxyManagerAzureInit:
         cfg = AzureConfig(ssh_key=VALID_SSH_KEY, credentials="fake-sub-id")
         runtime = ManagerRuntimeConfig(log=False)
 
-        with patch.dict("sys.modules", {
-            "azure": MagicMock(),
-            "azure.identity": MagicMock(
-                DefaultAzureCredential=sdk["DefaultAzureCredential"],
-                ClientSecretCredential=sdk["ClientSecretCredential"],
-            ),
-            "azure.mgmt": MagicMock(),
-            "azure.mgmt.subscription": MagicMock(SubscriptionClient=sdk["SubscriptionClient"]),
-            "azure.mgmt.resource": MagicMock(ResourceManagementClient=sdk["ResourceManagementClient"]),
-            "azure.mgmt.network": MagicMock(
-                NetworkManagementClient=sdk["NetworkManagementClient"],
-                models=sdk["network_models"],
-            ),
-            "azure.mgmt.compute": MagicMock(
-                ComputeManagementClient=sdk["ComputeManagementClient"],
-                models=sdk["compute_models"],
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "azure": MagicMock(),
+                "azure.identity": MagicMock(
+                    DefaultAzureCredential=sdk["DefaultAzureCredential"],
+                    ClientSecretCredential=sdk["ClientSecretCredential"],
+                ),
+                "azure.mgmt": MagicMock(),
+                "azure.mgmt.subscription": MagicMock(
+                    SubscriptionClient=sdk["SubscriptionClient"]
+                ),
+                "azure.mgmt.resource": MagicMock(
+                    ResourceManagementClient=sdk["ResourceManagementClient"]
+                ),
+                "azure.mgmt.network": MagicMock(
+                    NetworkManagementClient=sdk["NetworkManagementClient"],
+                    models=sdk["network_models"],
+                ),
+                "azure.mgmt.compute": MagicMock(
+                    ComputeManagementClient=sdk["ComputeManagementClient"],
+                    models=sdk["compute_models"],
+                ),
+            },
+        ):
             from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+
             mgr = ProxyManagerAzure.from_config(cfg, runtime)
 
         assert mgr._regions
@@ -206,52 +247,70 @@ class TestProxyManagerAzureInit:
         key_file = tmp_path / "keys.pub"
         key_file.write_text(f"{VALID_SSH_KEY}\n", encoding="utf-8")
 
-        with patch.dict("sys.modules", {
-            "azure": MagicMock(),
-            "azure.identity": MagicMock(
-                DefaultAzureCredential=sdk["DefaultAzureCredential"],
-                ClientSecretCredential=sdk["ClientSecretCredential"],
-            ),
-            "azure.mgmt": MagicMock(),
-            "azure.mgmt.subscription": MagicMock(SubscriptionClient=sdk["SubscriptionClient"]),
-            "azure.mgmt.resource": MagicMock(ResourceManagementClient=sdk["ResourceManagementClient"]),
-            "azure.mgmt.network": MagicMock(
-                NetworkManagementClient=sdk["NetworkManagementClient"],
-                models=sdk["network_models"],
-            ),
-            "azure.mgmt.compute": MagicMock(
-                ComputeManagementClient=sdk["ComputeManagementClient"],
-                models=sdk["compute_models"],
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "azure": MagicMock(),
+                "azure.identity": MagicMock(
+                    DefaultAzureCredential=sdk["DefaultAzureCredential"],
+                    ClientSecretCredential=sdk["ClientSecretCredential"],
+                ),
+                "azure.mgmt": MagicMock(),
+                "azure.mgmt.subscription": MagicMock(
+                    SubscriptionClient=sdk["SubscriptionClient"]
+                ),
+                "azure.mgmt.resource": MagicMock(
+                    ResourceManagementClient=sdk["ResourceManagementClient"]
+                ),
+                "azure.mgmt.network": MagicMock(
+                    NetworkManagementClient=sdk["NetworkManagementClient"],
+                    models=sdk["network_models"],
+                ),
+                "azure.mgmt.compute": MagicMock(
+                    ComputeManagementClient=sdk["ComputeManagementClient"],
+                    models=sdk["compute_models"],
+                ),
+            },
+        ):
             with patch.dict("os.environ", {"AZURE_SUBSCRIPTION_ID": "fake-sub-id"}):
                 from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
-                mgr = ProxyManagerAzure(ssh_key=str(key_file), credentials="fake-sub-id", log=False)
+
+                mgr = ProxyManagerAzure(
+                    ssh_key=str(key_file), credentials="fake-sub-id", log=False
+                )
 
         assert mgr.ssh_keys == [VALID_SSH_KEY]
 
     def test_bad_ssh_dict_structure_raises_type_error(self):
         sdk = _make_mock_azure_sdk()
-        with patch.dict("sys.modules", {
-            "azure": MagicMock(),
-            "azure.identity": MagicMock(
-                DefaultAzureCredential=sdk["DefaultAzureCredential"],
-                ClientSecretCredential=sdk["ClientSecretCredential"],
-            ),
-            "azure.mgmt": MagicMock(),
-            "azure.mgmt.subscription": MagicMock(SubscriptionClient=sdk["SubscriptionClient"]),
-            "azure.mgmt.resource": MagicMock(ResourceManagementClient=sdk["ResourceManagementClient"]),
-            "azure.mgmt.network": MagicMock(
-                NetworkManagementClient=sdk["NetworkManagementClient"],
-                models=sdk["network_models"],
-            ),
-            "azure.mgmt.compute": MagicMock(
-                ComputeManagementClient=sdk["ComputeManagementClient"],
-                models=sdk["compute_models"],
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "azure": MagicMock(),
+                "azure.identity": MagicMock(
+                    DefaultAzureCredential=sdk["DefaultAzureCredential"],
+                    ClientSecretCredential=sdk["ClientSecretCredential"],
+                ),
+                "azure.mgmt": MagicMock(),
+                "azure.mgmt.subscription": MagicMock(
+                    SubscriptionClient=sdk["SubscriptionClient"]
+                ),
+                "azure.mgmt.resource": MagicMock(
+                    ResourceManagementClient=sdk["ResourceManagementClient"]
+                ),
+                "azure.mgmt.network": MagicMock(
+                    NetworkManagementClient=sdk["NetworkManagementClient"],
+                    models=sdk["network_models"],
+                ),
+                "azure.mgmt.compute": MagicMock(
+                    ComputeManagementClient=sdk["ComputeManagementClient"],
+                    models=sdk["compute_models"],
+                ),
+            },
+        ):
             with patch.dict("os.environ", {"AZURE_SUBSCRIPTION_ID": "fake-sub-id"}):
                 from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+
                 with pytest.raises(TypeError, match="Bad ssh_key"):
                     ProxyManagerAzure(
                         ssh_key=[{"name": "broken"}],  # type: ignore[list-item]
@@ -271,37 +330,53 @@ class TestProxyManagerAzureInit:
 
         with patch("builtins.__import__", side_effect=_import_mock):
             with pytest.raises(ImportError, match=r"auto_proxy_vpn\[azure\]"):
-                ProxyManagerAzure(ssh_key=VALID_SSH_KEY, credentials="fake-sub-id", log=False)
+                ProxyManagerAzure(
+                    ssh_key=VALID_SSH_KEY, credentials="fake-sub-id", log=False
+                )
 
     def test_logger_config_and_client_secret_credentials_dict(self):
         sdk = _make_mock_azure_sdk()
         logger_proxy = MagicMock()
         logger_azure = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "azure": MagicMock(),
-            "azure.identity": MagicMock(
-                DefaultAzureCredential=sdk["DefaultAzureCredential"],
-                ClientSecretCredential=sdk["ClientSecretCredential"],
-            ),
-            "azure.mgmt": MagicMock(),
-            "azure.mgmt.subscription": MagicMock(SubscriptionClient=sdk["SubscriptionClient"]),
-            "azure.mgmt.resource": MagicMock(ResourceManagementClient=sdk["ResourceManagementClient"]),
-            "azure.mgmt.network": MagicMock(
-                NetworkManagementClient=sdk["NetworkManagementClient"],
-                models=sdk["network_models"],
-            ),
-            "azure.mgmt.compute": MagicMock(
-                ComputeManagementClient=sdk["ComputeManagementClient"],
-                models=sdk["compute_models"],
-            ),
-        }):
-            with patch("auto_proxy_vpn.providers.azure.azure_proxy.basicConfig") as basic_cfg:
+        with patch.dict(
+            "sys.modules",
+            {
+                "azure": MagicMock(),
+                "azure.identity": MagicMock(
+                    DefaultAzureCredential=sdk["DefaultAzureCredential"],
+                    ClientSecretCredential=sdk["ClientSecretCredential"],
+                ),
+                "azure.mgmt": MagicMock(),
+                "azure.mgmt.subscription": MagicMock(
+                    SubscriptionClient=sdk["SubscriptionClient"]
+                ),
+                "azure.mgmt.resource": MagicMock(
+                    ResourceManagementClient=sdk["ResourceManagementClient"]
+                ),
+                "azure.mgmt.network": MagicMock(
+                    NetworkManagementClient=sdk["NetworkManagementClient"],
+                    models=sdk["network_models"],
+                ),
+                "azure.mgmt.compute": MagicMock(
+                    ComputeManagementClient=sdk["ComputeManagementClient"],
+                    models=sdk["compute_models"],
+                ),
+            },
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.azure.azure_proxy.basicConfig"
+            ) as basic_cfg:
                 with patch(
                     "auto_proxy_vpn.providers.azure.azure_proxy.getLogger",
-                    side_effect=lambda name: logger_azure if name == "azure" else logger_proxy,
+                    side_effect=lambda name: (
+                        logger_azure if name == "azure" else logger_proxy
+                    ),
                 ):
-                    from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+                    from auto_proxy_vpn.providers.azure.azure_proxy import (
+                        ProxyManagerAzure,
+                    )
+
                     mgr = ProxyManagerAzure(
                         ssh_key=VALID_SSH_KEY,
                         credentials={
@@ -315,7 +390,9 @@ class TestProxyManagerAzureInit:
 
         basic_cfg.assert_called_once()
         sdk["ClientSecretCredential"].assert_called_once()
-        sdk["ResourceManagementClient"].assert_called_with(sdk["ClientSecretCredential"].return_value, "dict-sub-id")
+        sdk["ResourceManagementClient"].assert_called_with(
+            sdk["ClientSecretCredential"].return_value, "dict-sub-id"
+        )
         assert mgr.logger is logger_proxy
 
 
@@ -323,21 +400,25 @@ class TestProxyManagerAzureInit:
 # ProxyManagerAzure — get_proxy
 # ============================================================================
 
-class TestProxyManagerAzureGetProxy:
 
+class TestProxyManagerAzureGetProxy:
     def test_get_proxy_creates_vm(self):
         mgr, sdk = _build_azure_manager()
 
         # Mock resource group listing (no existing proxies)
         sdk["resource_client"].resource_groups.list.return_value = []
-        sdk["resource_client"].resource_groups.create_or_update.return_value = MagicMock()
+        sdk[
+            "resource_client"
+        ].resource_groups.create_or_update.return_value = MagicMock()
 
         # Mock network operations
         nsg_future = MagicMock()
         nsg_result = MagicMock()
         nsg_result.id = "nsg-id"
         nsg_future.result.return_value = nsg_result
-        sdk["network_client"].network_security_groups.begin_create_or_update.return_value = nsg_future
+        sdk[
+            "network_client"
+        ].network_security_groups.begin_create_or_update.return_value = nsg_future
 
         vnet_future = MagicMock()
         subnet_mock = MagicMock()
@@ -345,36 +426,51 @@ class TestProxyManagerAzureGetProxy:
         vnet_result = MagicMock()
         vnet_result.subnets = [subnet_mock]
         vnet_future.result.return_value = vnet_result
-        sdk["network_client"].virtual_networks.begin_create_or_update.return_value = vnet_future
+        sdk[
+            "network_client"
+        ].virtual_networks.begin_create_or_update.return_value = vnet_future
 
         public_ip_future = MagicMock()
         public_ip_result = MagicMock()
         public_ip_result.ip_address = "40.0.0.1"
         public_ip_result.id = "pip-id"
         public_ip_future.result.return_value = public_ip_result
-        sdk["network_client"].public_ip_addresses.begin_create_or_update.return_value = public_ip_future
+        sdk[
+            "network_client"
+        ].public_ip_addresses.begin_create_or_update.return_value = public_ip_future
 
         nic_future = MagicMock()
         nic_result = MagicMock()
         nic_result.id = "nic-id"
         nic_future.result.return_value = nic_result
-        sdk["network_client"].network_interfaces.begin_create_or_update.return_value = nic_future
+        sdk[
+            "network_client"
+        ].network_interfaces.begin_create_or_update.return_value = nic_future
 
         # Mock compute operations
         vm_future = MagicMock()
         vm_future.result.return_value = MagicMock()
-        sdk["compute_client"].virtual_machines.begin_create_or_update.return_value = vm_future
+        sdk[
+            "compute_client"
+        ].virtual_machines.begin_create_or_update.return_value = vm_future
 
         # Mock resource group deletion (for NetworkWatcherRG)
-        sdk["resource_client"].resource_groups.begin_delete.side_effect = Exception("not found")
+        sdk["resource_client"].resource_groups.begin_delete.side_effect = Exception(
+            "not found"
+        )
 
         # Mock image version
         image_version = MagicMock()
         image_version.name = "1.0.0"
         sdk["compute_client"].virtual_machine_images.list.return_value = [image_version]
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
-            proxy = mgr.get_proxy(port=12345, size="small", region="eastus", is_async=True)
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
+            proxy = mgr.get_proxy(
+                port=12345, size="small", region="eastus", is_async=True
+            )
 
         assert proxy.port == 12345
         assert proxy.region == "eastus"
@@ -383,7 +479,10 @@ class TestProxyManagerAzureGetProxy:
         mgr, sdk = _build_azure_manager()
         sdk["resource_client"].resource_groups.list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with pytest.raises(ValueError, match="Region"):
                 mgr.get_proxy(region="nonexistent-region")
 
@@ -394,7 +493,10 @@ class TestProxyManagerAzureGetProxy:
         rg.tags = {"type": "proxy"}
         sdk["resource_client"].resource_groups.list.return_value = [rg]
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with pytest.raises(NameError, match="already exists"):
                 mgr.get_proxy(proxy_name="proxy1")
 
@@ -402,7 +504,10 @@ class TestProxyManagerAzureGetProxy:
         mgr, sdk = _build_azure_manager()
         sdk["resource_client"].resource_groups.list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with pytest.raises(TypeError, match="auth"):
                 mgr.get_proxy(auth="bad-auth")  # type: ignore[arg-type]
 
@@ -410,7 +515,10 @@ class TestProxyManagerAzureGetProxy:
         mgr, sdk = _build_azure_manager()
         sdk["resource_client"].resource_groups.list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with pytest.raises(KeyError, match="two keys"):
                 mgr.get_proxy(auth={"user": "only-user"})  # type: ignore[arg-type]
 
@@ -418,7 +526,10 @@ class TestProxyManagerAzureGetProxy:
         mgr, sdk = _build_azure_manager()
         sdk["resource_client"].resource_groups.list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with pytest.raises(TypeError, match="bad format"):
                 mgr.get_proxy(allowed_ips=["bad-ip"])
 
@@ -426,7 +537,10 @@ class TestProxyManagerAzureGetProxy:
         mgr, sdk = _build_azure_manager()
         sdk["resource_client"].resource_groups.list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with patch(
                 "auto_proxy_vpn.providers.azure.azure_proxy.start_proxy",
                 side_effect=[("", True), ("", True)],
@@ -440,7 +554,10 @@ class TestProxyManagerAzureGetProxy:
         mgr, sdk = _build_azure_manager()
         sdk["resource_client"].resource_groups.list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with patch(
                 "auto_proxy_vpn.providers.azure.azure_proxy.start_proxy",
                 side_effect=[("", True), ("40.0.0.99", False)],
@@ -460,7 +577,10 @@ class TestProxyManagerAzureGetProxy:
         rg2.tags = {}
         sdk["resource_client"].resource_groups.list.return_value = [rg1, rg2]
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with patch(
                 "auto_proxy_vpn.providers.azure.azure_proxy.start_proxy",
                 return_value=("40.0.0.42", False),
@@ -474,7 +594,10 @@ class TestProxyManagerAzureGetProxy:
         sdk["resource_client"].resource_groups.list.return_value = []
         mgr.logger = MagicMock()
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with patch(
                 "auto_proxy_vpn.providers.azure.azure_proxy.start_proxy",
                 return_value=("40.0.0.70", False),
@@ -494,7 +617,10 @@ class TestProxyManagerAzureGetProxy:
         mgr, sdk = _build_azure_manager()
         sdk["resource_client"].resource_groups.list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with patch(
                 "auto_proxy_vpn.providers.azure.azure_proxy.start_proxy",
                 return_value=("40.0.0.71", False),
@@ -513,7 +639,10 @@ class TestProxyManagerAzureGetProxy:
         sdk["resource_client"].resource_groups.list.return_value = []
         mgr.logger = MagicMock()
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with patch(
                 "auto_proxy_vpn.providers.azure.azure_proxy.start_proxy",
                 side_effect=[("", True), ("40.0.0.99", False)],
@@ -527,7 +656,10 @@ class TestProxyManagerAzureGetProxy:
         sdk["resource_client"].resource_groups.list.return_value = []
         mgr.logger = MagicMock()
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with patch(
                 "auto_proxy_vpn.providers.azure.azure_proxy.start_proxy",
                 side_effect=[("", True), ("", True)],
@@ -542,8 +674,8 @@ class TestProxyManagerAzureGetProxy:
 # AzureProxy
 # ============================================================================
 
-class TestAzureProxy:
 
+class TestAzureProxy:
     def test_str_contains_azure(self):
         mgr, _ = _build_azure_manager()
         from auto_proxy_vpn.providers.azure.azure_proxy import AzureProxy
@@ -563,11 +695,17 @@ class TestAzureProxy:
     def test_bad_on_exit_raises(self):
         mgr, _ = _build_azure_manager()
         from auto_proxy_vpn.providers.azure.azure_proxy import AzureProxy
+
         with pytest.raises(ValueError, match="on_exit"):
             with patch.object(AzureProxy, "is_active", return_value=True):
                 AzureProxy(
-                    manager=mgr, name="p", ip="1.1.1.1", port=80,
-                    region="r", is_async=True, on_exit="invalid", # type: ignore
+                    manager=mgr,
+                    name="p",
+                    ip="1.1.1.1",
+                    port=80,
+                    region="r",
+                    is_async=True,
+                    on_exit="invalid",  # type: ignore
                 )
 
     def test_is_active_async_wait_false_sets_vm_started(self):
@@ -578,7 +716,9 @@ class TestAzureProxy:
         vm.provisioning_state = "Succeeded"
         sdk["compute_client"].virtual_machines.get.return_value = vm
 
-        with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"):
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"
+        ):
             proxy = AzureProxy(
                 manager=mgr,
                 name="proxy1",
@@ -595,7 +735,9 @@ class TestAzureProxy:
         mgr, sdk = _build_azure_manager()
         from auto_proxy_vpn.providers.azure.azure_proxy import AzureProxy
 
-        with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"):
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"
+        ):
             proxy = AzureProxy(
                 manager=mgr,
                 name="proxy1",
@@ -624,7 +766,11 @@ class TestAzureProxy:
         vm_resource = SimpleNamespace(name="proxy1")
         fw_resource = SimpleNamespace(name="proxy1-firewall")
         vnet_resource = SimpleNamespace(name="proxy1-vnet")
-        sdk["resource_client"].resources.list.return_value = [vnet_resource, vm_resource, fw_resource]
+        sdk["resource_client"].resources.list.return_value = [
+            vnet_resource,
+            vm_resource,
+            fw_resource,
+        ]
 
         vm_delete = MagicMock()
         vm_delete.wait.return_value = None
@@ -634,7 +780,9 @@ class TestAzureProxy:
         rg_delete.wait.return_value = None
         sdk["resource_client"].resource_groups.begin_delete.return_value = rg_delete
 
-        with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"):
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"
+        ):
             proxy = AzureProxy(
                 manager=mgr,
                 name="proxy1",
@@ -648,11 +796,15 @@ class TestAzureProxy:
 
         proxy._stop_proxy()
 
-        sdk["compute_client"].virtual_machines.get.assert_called_with("proxy1", "proxy1")
+        sdk["compute_client"].virtual_machines.get.assert_called_with(
+            "proxy1", "proxy1"
+        )
         sdk["compute_client"].virtual_machines.begin_delete.assert_called_once()
         sdk["network_client"].network_security_groups.begin_delete.assert_called_once()
         sdk["network_client"].virtual_networks.begin_delete.assert_called_once()
-        sdk["resource_client"].resource_groups.begin_delete.assert_called_once_with("proxy1")
+        sdk["resource_client"].resource_groups.begin_delete.assert_called_once_with(
+            "proxy1"
+        )
 
     def test_init_logs_for_create_and_reload_paths(self):
         mgr, _ = _build_azure_manager()
@@ -695,8 +847,12 @@ class TestAzureProxy:
         vm_ready.provisioning_state = "Succeeded"
         sdk["compute_client"].virtual_machines.get.side_effect = [vm_pending, vm_ready]
 
-        with patch("auto_proxy_vpn.providers.azure.azure_proxy.sleep", return_value=None):
-            with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"):
+        with patch(
+            "auto_proxy_vpn.providers.azure.azure_proxy.sleep", return_value=None
+        ):
+            with patch(
+                "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"
+            ):
                 proxy = AzureProxy(
                     manager=mgr,
                     name="proxy-sync",
@@ -712,7 +868,9 @@ class TestAzureProxy:
         mgr, sdk = _build_azure_manager()
         from auto_proxy_vpn.providers.azure.azure_proxy import AzureProxy
 
-        with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"):
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"
+        ):
             proxy = AzureProxy(
                 manager=mgr,
                 name="proxy1",
@@ -733,7 +891,9 @@ class TestAzureProxy:
         from auto_proxy_vpn.providers.azure.azure_proxy import AzureProxy
 
         logger = MagicMock()
-        with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"):
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"
+        ):
             proxy = AzureProxy(
                 manager=mgr,
                 name="proxy-logs",
@@ -754,7 +914,9 @@ class TestAzureProxy:
         from auto_proxy_vpn.providers.azure.azure_proxy import AzureProxy
 
         logger = MagicMock()
-        with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"):
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.1"
+        ):
             proxy = AzureProxy(
                 manager=mgr,
                 name="proxy-keep-logs",
@@ -774,6 +936,7 @@ class TestAzureProxy:
 # ============================================================================
 # get_running_proxy_names
 # ============================================================================
+
 
 class TestAzureRunningNames:
     def test_returns_proxy_names(self):
@@ -828,7 +991,9 @@ class TestProxyManagerAzureGetProxyByName:
 
         with patch("auto_proxy_vpn.providers.azure.azure_proxy.SSHClient") as mock_ssh:
             mock_ssh.return_value.run_command.return_value = (0, squid_conf, "")
-            with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.5"):
+            with patch(
+                "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.5"
+            ):
                 proxy = mgr.get_proxy_by_name("proxy1", is_async=True, on_exit="keep")
 
         assert proxy.name == "proxy1"
@@ -944,7 +1109,10 @@ class TestProxyManagerAzureGetProxyByName:
 
         with patch("auto_proxy_vpn.providers.azure.azure_proxy.SSHClient") as mock_ssh:
             mock_ssh.return_value.run_command.return_value = (0, "http_port 3128\n", "")
-            with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="40.0.0.99"):
+            with patch(
+                "auto_proxy_vpn.utils.base_proxy.get_public_ip",
+                return_value="40.0.0.99",
+            ):
                 mgr.get_proxy_by_name("proxy-log", is_async=True)
 
         assert mgr.logger.info.called

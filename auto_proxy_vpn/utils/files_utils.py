@@ -1,11 +1,12 @@
 def get_ips_str(ips_list: list[str]):
     return "\n".join([f"acl custom_ips src {ip}" for ip in ips_list])
 
-def get_ssh_keys_str(ssh_keys: list[str], user: str = ''):
+
+def get_ssh_keys_str(ssh_keys: list[str], user: str = ""):
     keys = "\n".join(ssh_keys)
-    create_user = True if user == 'root' or not user else False
+    create_user = True if user == "root" or not user else False
     if create_user:
-        user = 'proxy-user'
+        user = "proxy-user"
     create_user_str = f"\nuseradd -m -s /bin/bash -G sudo {user}" if create_user else ""
     return f"""{create_user_str}
 mkdir -p /home/{user}/.ssh
@@ -16,20 +17,41 @@ chmod 600 /home/{user}/.ssh/authorized_keys
 chown -R {user}:{user} /home/{user}/.ssh
 """
 
-def get_squid_file(port: int, user: str = '', password: str = "", allowed_ips: list[str] = [], ssh_keys: list[str] = [], os_user: str = '') -> str:
-    allowed_ips_str = get_ips_str(allowed_ips)+'\nhttp_access allow custom_ips' if allowed_ips else ''
-    auth_str = f"""#auth credentials: user: {user}, password: {password}
+
+def get_squid_file(
+    port: int,
+    user: str = "",
+    password: str = "",
+    allowed_ips: list[str] = [],
+    ssh_keys: list[str] = [],
+    os_user: str = "",
+) -> str:
+    allowed_ips_str = (
+        get_ips_str(allowed_ips) + "\nhttp_access allow custom_ips"
+        if allowed_ips
+        else ""
+    )
+    auth_str = (
+        f"""#auth credentials: user: {user}, password: {password}
 auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwords
 auth_param basic realm proxy
 acl authenticated proxy_auth REQUIRED
 http_access allow authenticated
 {allowed_ips_str}
-http_access deny all""" if user else ("http_access allow all" if not allowed_ips else get_ips_str(allowed_ips)+"\nhttp_access allow custom_ips\nhttp_access deny all")
+http_access deny all"""
+        if user
+        else (
+            "http_access allow all"
+            if not allowed_ips
+            else get_ips_str(allowed_ips)
+            + "\nhttp_access allow custom_ips\nhttp_access deny all"
+        )
+    )
 
     ssh_config = ""
     if ssh_keys:
         ssh_config = get_ssh_keys_str(ssh_keys, os_user)
-    
+
     return f"""#!/bin/bash
 
 apt update

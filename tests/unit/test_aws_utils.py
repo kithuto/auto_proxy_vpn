@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -59,7 +58,7 @@ class TestGetRegionInstances:
         }
         manager._boto3.client.return_value = client
 
-        result = get_region_instances(manager, "us-east-1") # type: ignore
+        result = get_region_instances(manager, "us-east-1")  # type: ignore
 
         assert result == [("proxy1", "us-east-1"), ("proxy2", "us-east-1")]
 
@@ -77,7 +76,7 @@ class TestGetRegionInstances:
         }
         manager._boto3.client.return_value = client
 
-        assert get_region_instances(manager, "eu-west-1") == [] # type: ignore
+        assert get_region_instances(manager, "eu-west-1") == []  # type: ignore
 
 
 class TestStartProxy:
@@ -128,7 +127,7 @@ class TestStartProxy:
         client.create_security_group.return_value = {"GroupId": "sg-1"}
 
         _, _, _, error = start_proxy(
-            manager, # type: ignore
+            manager,  # type: ignore
             "proxy1",
             3128,
             "us-east-1",
@@ -147,11 +146,13 @@ class TestStartProxy:
             "Images": [{"ImageId": "ami-1", "CreationDate": "2025-01-01"}]
         }
         client.create_security_group.return_value = {"GroupId": "sg-1"}
-        ec2_resource.create_instances.side_effect = MockClientError("UnauthorizedOperation")
+        ec2_resource.create_instances.side_effect = MockClientError(
+            "UnauthorizedOperation"
+        )
 
         with pytest.raises(AwsUnauthorizedOperationError):
             start_proxy(
-                manager, # type: ignore
+                manager,  # type: ignore
                 "proxy1",
                 3128,
                 "us-east-1",
@@ -168,10 +169,12 @@ class TestStartProxy:
             "Images": [{"ImageId": "ami-1", "CreationDate": "2025-01-01"}]
         }
         client.create_security_group.return_value = {"GroupId": "sg-1"}
-        ec2_resource.create_instances.side_effect = MockClientError("InsufficientInstanceCapacity")
+        ec2_resource.create_instances.side_effect = MockClientError(
+            "InsufficientInstanceCapacity"
+        )
 
         ip, instance_id, sg_id, error = start_proxy(
-            manager, # type: ignore
+            manager,  # type: ignore
             "proxy1",
             3128,
             "us-east-1",
@@ -193,7 +196,7 @@ class TestStartProxy:
 
         with pytest.raises(MockClientError):
             start_proxy(
-                manager, # type: ignore
+                manager,  # type: ignore
                 "proxy1",
                 3128,
                 "us-east-1",
@@ -212,7 +215,7 @@ class TestStartProxy:
         client.create_security_group.return_value = {"GroupId": "sg-1"}
 
         start_proxy(
-            manager, # type: ignore
+            manager,  # type: ignore
             "proxy1",
             3128,
             "us-east-1",

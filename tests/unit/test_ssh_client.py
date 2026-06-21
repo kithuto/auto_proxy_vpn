@@ -63,7 +63,9 @@ class TestSSHClient:
 
     def test_download_file_raises_connection_error_on_stderr(self):
         client = SSHClient("1.2.3.4", "root")
-        with patch.object(client, "run_command", return_value=(1, "", "permission denied")):
+        with patch.object(
+            client, "run_command", return_value=(1, "", "permission denied")
+        ):
             with pytest.raises(ConnectionError, match="Can't connect"):
                 client.download_file("/tmp/a.txt", "./a.txt")
 

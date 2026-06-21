@@ -21,6 +21,7 @@ from pathlib import Path
 from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
 
 from dotenv import load_dotenv
+
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 pytestmark = [pytest.mark.integration, pytest.mark.google]
@@ -70,12 +71,12 @@ class TestGoogleIntegration:
 
     def test_create_batch_via_pool(self, manager: ProxyManagerGoogle):
         batch = manager.get_proxies(2, sizes="small", on_exit="destroy")
-        
+
         for proxy in batch:
             assert proxy.is_active(wait=True)
             assert proxy.ip
             assert proxy.port > 0
-        
+
         names = manager.get_running_proxy_names()
         assert isinstance(names, list)
         try:

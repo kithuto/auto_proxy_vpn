@@ -7,27 +7,35 @@ from re import finditer, search
 from time import sleep
 from pathlib import Path
 
-from auto_proxy_vpn import CloudProvider, ProxyManagers, ManagerRuntimeConfig, AzureConfig
+from auto_proxy_vpn import (
+    CloudProvider,
+    ProxyManagers,
+    ManagerRuntimeConfig,
+    AzureConfig,
+)
 from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
 from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key
 from auto_proxy_vpn.utils.ssh_client import SSHClient
 from .azure_utils import start_proxy
 
+
 class AzureProxy(BaseProxy):
-    def __init__(self,
-                 manager: 'ProxyManagerAzure',
-                 name: str,
-                 ip: str,
-                 port: int,
-                 region: str,
-                 proxy_instance: str = '',
-                 allowed_ips: list[str] = [],
-                 is_async: bool = False,
-                 user: str = '',
-                 password: str = '',
-                 logger: Logger | None = None,
-                 reload: bool = False,
-                 on_exit: Literal['keep', 'destroy'] = 'destroy'):
+    def __init__(
+        self,
+        manager: "ProxyManagerAzure",
+        name: str,
+        ip: str,
+        port: int,
+        region: str,
+        proxy_instance: str = "",
+        allowed_ips: list[str] = [],
+        is_async: bool = False,
+        user: str = "",
+        password: str = "",
+        logger: Logger | None = None,
+        reload: bool = False,
+        on_exit: Literal["keep", "destroy"] = "destroy",
+    ):
         """Represent an Azure VM-based proxy instance.
 
         This object stores proxy metadata and lifecycle state and can be
@@ -77,7 +85,7 @@ class AzureProxy(BaseProxy):
         ValueError
             If ``on_exit`` is not ``'keep'`` or ``'destroy'``.
         """
-        
+
         self.manager = manager
         self.name = name
         self.ip = ip
@@ -92,102 +100,149 @@ class AzureProxy(BaseProxy):
         self.active = False
         self.logger = logger
         self.stopped = False
-        if on_exit not in ['keep', 'destroy']:
+        if on_exit not in ["keep", "destroy"]:
             raise ValueError("Bad on_exit option!")
-        self.destroy = True if on_exit == 'destroy' else False
-        
+        self.destroy = True if on_exit == "destroy" else False
+
         if not self.is_async and self.logger and not reload:
-            self.logger.info('Waitting for the Azure proxy to be set up...')
+            self.logger.info("Waitting for the Azure proxy to be set up...")
         self.active = self.is_active()
         if self.logger:
             if not reload:
-                proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                proxy_suffix = (
+                    f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                )
                 status = "and ready to use" if self.active else "but not active yet"
                 self.logger.info(f"New Azure proxy{proxy_suffix} created {status}.")
             else:
-                proxy_suffix = f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                proxy_suffix = (
+                    f" {self.get_proxy_str()}" if self.get_proxy_str() else ""
+                )
                 status = "active" if self.active else "inactive"
                 self.logger.info(f"Azure proxy{proxy_suffix} reloaded and {status}.")
-    
-    def is_active(self, wait = False) -> bool:
+
+    def is_active(self, wait=False) -> bool:
         if not self._vm_started:
             if self.is_async and not wait:
-                self._vm_started = self.manager._compute_client.virtual_machines.get(self.name, self.name).provisioning_state == 'Succeeded'
+                self._vm_started = (
+                    self.manager._compute_client.virtual_machines.get(
+                        self.name, self.name
+                    ).provisioning_state
+                    == "Succeeded"
+                )
             else:
                 times = 0
-                self._vm_started = self.manager._compute_client.virtual_machines.get(self.name, self.name).provisioning_state == 'Succeeded'
+                self._vm_started = (
+                    self.manager._compute_client.virtual_machines.get(
+                        self.name, self.name
+                    ).provisioning_state
+                    == "Succeeded"
+                )
                 while not self._vm_started and times < 10:
                     times += 1
                     sleep(5)
-                    self._vm_started = self.manager._compute_client.virtual_machines.get(self.name, self.name).provisioning_state == 'Succeeded'
-        
+                    self._vm_started = (
+                        self.manager._compute_client.virtual_machines.get(
+                            self.name, self.name
+                        ).provisioning_state
+                        == "Succeeded"
+                    )
+
         if not self._vm_started:
             return self.active
-        
+
         return super().is_active(wait)
-    
+
     def _stop_proxy(self, wait: bool = True):
         if self.stopped:
             return
-        
+
         if self.destroy:
             if not self.is_async and wait:
-                resources_proxy_names = [self.name, f'{self.name}-firewall', f'{self.name}-vnet']
-                resources_proxy = sorted([x for x in self.manager._resource_client.resources.list(filter=f"resourceGroup eq '{self.name}'") if x.name and x.name in resources_proxy_names], key=lambda x: x.name if x.name else '')
+                resources_proxy_names = [
+                    self.name,
+                    f"{self.name}-firewall",
+                    f"{self.name}-vnet",
+                ]
+                resources_proxy = sorted(
+                    [
+                        x
+                        for x in self.manager._resource_client.resources.list(
+                            filter=f"resourceGroup eq '{self.name}'"
+                        )
+                        if x.name and x.name in resources_proxy_names
+                    ],
+                    key=lambda x: x.name if x.name else "",
+                )
                 for resource in resources_proxy:
-                    if resource.name and '-' not in resource.name:
-                        self.manager._compute_client.virtual_machines.begin_delete(self.name, resource.name).wait()
-                    elif resource.name and resource.name.endswith('-firewall'):
-                        self.manager._network_client.network_security_groups.begin_delete(self.name, resource.name)
-                    elif resource.name and resource.name.endswith('-vnet'):
-                        self.manager._network_client.virtual_networks.begin_delete(self.name, resource.name)
-            
-            resource_group_deletion = self.manager._resource_client.resource_groups.begin_delete(self.name)
+                    if resource.name and "-" not in resource.name:
+                        self.manager._compute_client.virtual_machines.begin_delete(
+                            self.name, resource.name
+                        ).wait()
+                    elif resource.name and resource.name.endswith("-firewall"):
+                        self.manager._network_client.network_security_groups.begin_delete(
+                            self.name, resource.name
+                        )
+                    elif resource.name and resource.name.endswith("-vnet"):
+                        self.manager._network_client.virtual_networks.begin_delete(
+                            self.name, resource.name
+                        )
+
+            resource_group_deletion = (
+                self.manager._resource_client.resource_groups.begin_delete(self.name)
+            )
             if not self.is_async and wait:
                 resource_group_deletion.wait()
-            
+
             if self.logger:
-                self.logger.info(f"Azure proxy{' '+self.get_proxy_str() if self.get_proxy_str() else ''} removed.")
+                self.logger.info(
+                    f"Azure proxy{' ' + self.get_proxy_str() if self.get_proxy_str() else ''} removed."
+                )
         else:
             if self.logger:
-                self.logger.info(f"Azure proxy{' '+self.get_proxy_str() if self.get_proxy_str() else ''} kept as per on_exit='keep' setting.")
-        
+                self.logger.info(
+                    f"Azure proxy{' ' + self.get_proxy_str() if self.get_proxy_str() else ''} kept as per on_exit='keep' setting."
+                )
+
         self.stopped = True
         self.id = None
-        self.ip = ''
+        self.ip = ""
         self.port = 0
-        self.region = ''
-        self.user = ''
-        self.password = ''
+        self.region = ""
+        self.user = ""
+        self.password = ""
         self.logger = None
-        
+
     def __str__(self):
         return f"Azure p{super().__str__()[1:]}"
 
+
 @ProxyManagers.register(CloudProvider.AZURE)
 class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
-    def __init__(self,
-                 ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
-                 credentials: str | dict[str, str] = '',
-                 log: bool = True,
-                 log_file: str | None = None,
-                 log_format: str = '%(asctime)-10s %(levelname)-5s %(message)s',
-                 logger: Logger | None = None):
+    def __init__(
+        self,
+        ssh_key: list[dict[str, str] | str] | dict[str, str] | str | Path,
+        credentials: str | dict[str, str] = "",
+        log: bool = True,
+        log_file: str | None = None,
+        log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
+        logger: Logger | None = None,
+    ):
         """Create a manager that provisions Azure proxy virtual machines.
 
         This initializer validates Azure credentials and SSH key input,
         configures logging, imports Azure SDK clients, and loads available
         VM regions and size mappings used by the manager.
-        
-        To obtain Azure credentials, you need to create a new subscription and 
-        register an application in Azure Active Directory with the appropriate 
-        permissions. Then, you can provide the subscription ID, client ID, client 
-        secret, and tenant ID either as environment variables or directly as a 
+
+        To obtain Azure credentials, you need to create a new subscription and
+        register an application in Azure Active Directory with the appropriate
+        permissions. Then, you can provide the subscription ID, client ID, client
+        secret, and tenant ID either as environment variables or directly as a
         dictionary to the manager.\n
         With azure cli you can easily obtain the required credentials by running:\n
-        
+
         $ az ad sp create-for-rbac --name "my-proxy-manager" --role contributor --scopes /subscriptions/{subscription-id}
-        
+
         And save in a .env file or set the environment variables directly:\n
         appId → AZURE_CLIENT_ID\n
         password → AZURE_CLIENT_SECRET\n
@@ -256,107 +311,164 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             finally:
                 proxy.close()
         """
-        
-        if (not credentials or isinstance(credentials, dict) and "AZURE_SUBSCRIPTION_ID" not in credentials) and not environ.get("AZURE_SUBSCRIPTION_ID", ""):
-            raise ValueError("Azure credentials not provided. Please provide them as a parameter or set the AZURE_SUBSCRIPTION_ID environment variable.")
-        
+
+        if (
+            not credentials
+            or isinstance(credentials, dict)
+            and "AZURE_SUBSCRIPTION_ID" not in credentials
+        ) and not environ.get("AZURE_SUBSCRIPTION_ID", ""):
+            raise ValueError(
+                "Azure credentials not provided. Please provide them as a parameter or set the AZURE_SUBSCRIPTION_ID environment variable."
+            )
+
         if isinstance(ssh_key, Path):
             ssh_key = str(ssh_key)
-        
+
         if isinstance(ssh_key, str) and isfile(ssh_key):
             with open(ssh_key, "r") as f:
-                ssh_key = [x.strip('\n') for x in f.readlines() if x.strip('\n')]
+                ssh_key = [x.strip("\n") for x in f.readlines() if x.strip("\n")]
         try:
-            ssh_key = [ssh_key] if isinstance(ssh_key, str) or isinstance(ssh_key, dict) else ssh_key
-            self.ssh_keys: list[str] = [x if not isinstance(x, dict) else x['public_key'] for x in ssh_key if isinstance(x, dict) or (isinstance(x, str) and is_ssh_key(x))] 
-        except:
-            raise TypeError("Bad ssh_key. SSH in a dict must follow format: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}")
+            ssh_key = (
+                [ssh_key]
+                if isinstance(ssh_key, str) or isinstance(ssh_key, dict)
+                else ssh_key
+            )
+            self.ssh_keys: list[str] = [
+                x if not isinstance(x, dict) else x["public_key"]
+                for x in ssh_key
+                if isinstance(x, dict) or (isinstance(x, str) and is_ssh_key(x))
+            ]
+        except Exception:
+            raise TypeError(
+                "Bad ssh_key. SSH in a dict must follow format: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}"
+            )
         if not self.ssh_keys:
-            raise TypeError("No valid ssh keys found in the provided ssh_key parameter!")
+            raise TypeError(
+                "No valid ssh keys found in the provided ssh_key parameter!"
+            )
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
         self.logger = logger
         if self.log and not logger:
-            basicConfig(filename=log_file,
-                    format=self.log_format,
-                    filemode='a',
-                    datefmt='%d-%b-%Y %H:%M:%S',
-                    level=INFO)
-            self.logger = getLogger('proxy_logger')
-            
+            basicConfig(
+                filename=log_file,
+                format=self.log_format,
+                filemode="a",
+                datefmt="%d-%b-%Y %H:%M:%S",
+                level=INFO,
+            )
+            self.logger = getLogger("proxy_logger")
+
         # check azure imports
         try:
             from azure.identity import DefaultAzureCredential, ClientSecretCredential
             from azure.mgmt.subscription import SubscriptionClient
             from azure.mgmt.resource import ResourceManagementClient
             from azure.mgmt.network import NetworkManagementClient
-            from azure.mgmt.compute import  ComputeManagementClient
-            
+            from azure.mgmt.compute import ComputeManagementClient
+
             from azure.mgmt.network import models as network_models
             from azure.mgmt.compute import models as compute_models
-            
+
             # supressing azure sdk logs
             azure_logs = getLogger("azure")
             azure_logs.setLevel(ERROR)
-        except:
-            raise ImportError("Install the required azure packages to use the AzureProxyManager:"
-                              "             python3 -m pip install auto_proxy_vpn[azure]")
-        
+        except Exception:
+            raise ImportError(
+                "Install the required azure packages to use the AzureProxyManager:"
+                "             python3 -m pip install auto_proxy_vpn[azure]"
+            )
+
         if isinstance(credentials, dict) and "AZURE_TENANT_ID" in credentials:
             credential = ClientSecretCredential(
-                tenant_id=credentials.get("AZURE_TENANT_ID", ''),
-                client_id=credentials.get("AZURE_CLIENT_ID", ''),
-                client_secret=credentials.get("AZURE_CLIENT_SECRET", ''),
+                tenant_id=credentials.get("AZURE_TENANT_ID", ""),
+                client_id=credentials.get("AZURE_CLIENT_ID", ""),
+                client_secret=credentials.get("AZURE_CLIENT_SECRET", ""),
             )
         else:
             credential = DefaultAzureCredential()
-            
+
         subscription_id = environ.get("AZURE_SUBSCRIPTION_ID", "")
         if credentials:
             if isinstance(credentials, str):
                 subscription_id = credentials
-            elif isinstance(credentials, dict) and "AZURE_SUBSCRIPTION_ID" in credentials:
+            elif (
+                isinstance(credentials, dict) and "AZURE_SUBSCRIPTION_ID" in credentials
+            ):
                 subscription_id = credentials["AZURE_SUBSCRIPTION_ID"]
-        
+
         # saving all azure imports as instance variables to avoid import errors when the user is not using azure proxies
         self._resource_client = ResourceManagementClient(credential, subscription_id)
         self._network_client = NetworkManagementClient(credential, subscription_id)
         self._compute_client = ComputeManagementClient(credential, subscription_id)
         self._network_models = network_models
         self._compute_models = compute_models
-        
+
         subscription_client = SubscriptionClient(credential)
         # Only getting the available locations to deploy a virtual machine
-        locations_virtual_machine: list[str] = [x for x in self._resource_client.providers.get("Microsoft.Compute").resource_types if x.resource_type == 'virtualMachines'][0].locations # type: ignore
-        self._regions = [str(x.name) for x in subscription_client.subscriptions.list_locations(subscription_id) if x.display_name in locations_virtual_machine]
-        self._sizes_regions = {'small': [x for x in self._regions], 'medium': [x for x in self._regions], 'large': [x for x in self._regions]}
-        
-        self._instance_proxy_sizes: dict[Literal["small", "medium", "large"], str] = {"small": "Standard_B1s", "medium": "Standard_B1ms", "large": "Standard_B2s"}
-        
+        locations_virtual_machine: list[str] = [
+            x
+            for x in self._resource_client.providers.get(
+                "Microsoft.Compute"
+            ).resource_types
+            if x.resource_type == "virtualMachines"
+        ][0].locations  # type: ignore
+        self._regions = [
+            str(x.name)
+            for x in subscription_client.subscriptions.list_locations(subscription_id)
+            if x.display_name in locations_virtual_machine
+        ]
+        self._sizes_regions = {
+            "small": [x for x in self._regions],
+            "medium": [x for x in self._regions],
+            "large": [x for x in self._regions],
+        }
+
+        self._instance_proxy_sizes: dict[Literal["small", "medium", "large"], str] = {
+            "small": "Standard_B1s",
+            "medium": "Standard_B1ms",
+            "large": "Standard_B2s",
+        }
+
         # os image info
         self._image_publisher = "Canonical"
         self._image_offer = "ubuntu-24_04-lts"
         self._image_sku = "minimal"
-    
+
     @classmethod
-    def from_config(cls, config: AzureConfig | None = None, runtime_config: ManagerRuntimeConfig | None = None) -> 'ProxyManagerAzure':
+    def from_config(
+        cls,
+        config: AzureConfig | None = None,
+        runtime_config: ManagerRuntimeConfig | None = None,
+    ) -> "ProxyManagerAzure":
         """Create a ProxyManagerAzure instance from an AzureConfig object and a ManagerRuntimeConfig."""
         if config is None:
-            raise ValueError("AzureConfig must be provided to create a ProxyManagerAzure instance.")
+            raise ValueError(
+                "AzureConfig must be provided to create a ProxyManagerAzure instance."
+            )
         if runtime_config is None:
             runtime_config = ManagerRuntimeConfig()
-        return cls(config.ssh_key, config.credentials, runtime_config.log, runtime_config.log_file, runtime_config.log_format, runtime_config.logger)
-    
-    def get_proxy(self,
-                  port: int = 0,
-                  size: Literal['small', 'medium', 'large'] = 'medium',
-                  region: str = '',
-                  auth: dict[Literal['user', 'password'], str] = {},
-                  allowed_ips: str | list[str] = [],
-                  is_async: bool = False,
-                  retry: bool = True,
-                  proxy_name: str = '',
-                  on_exit: Literal['keep', 'destroy'] = 'destroy') -> AzureProxy:
+        return cls(
+            config.ssh_key,
+            config.credentials,
+            runtime_config.log,
+            runtime_config.log_file,
+            runtime_config.log_format,
+            runtime_config.logger,
+        )
+
+    def get_proxy(
+        self,
+        port: int = 0,
+        size: Literal["small", "medium", "large"] = "medium",
+        region: str = "",
+        auth: dict[Literal["user", "password"], str] = {},
+        allowed_ips: str | list[str] = [],
+        is_async: bool = False,
+        retry: bool = True,
+        proxy_name: str = "",
+        on_exit: Literal["keep", "destroy"] = "destroy",
+    ) -> AzureProxy:
         """Create and start an Azure-based proxy instance.
 
         The method selects (or validates) a region, prepares authentication and
@@ -416,82 +528,142 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
         Exception
             If proxy startup fails and no valid retry path remains.
         """
-        
+
         retry = retry if not region else False
-        
+
         if not port:
             port = randint(10000, 65000)
-        
-        all_resources = [x for x in self._resource_client.resource_groups.list() if x.name]
-        instances_list = [x.name for x in all_resources if x.tags and x.tags.get('type', '') == 'proxy']
+
+        all_resources = [
+            x for x in self._resource_client.resource_groups.list() if x.name
+        ]
+        instances_list = [
+            x.name
+            for x in all_resources
+            if x.tags and x.tags.get("type", "") == "proxy"
+        ]
         all_resources = [x.name for x in all_resources]
         if proxy_name:
             if proxy_name in all_resources:
                 raise NameError(f"Resource {proxy_name} already exists in azure!")
         else:
-            proxy_num = len(instances_list)+1
+            proxy_num = len(instances_list) + 1
             while f"proxy{proxy_num}" in all_resources:
                 proxy_num += 1
             proxy_name = f"proxy{proxy_num}"
-        
+
         proxy_size = self._instance_proxy_sizes[size]
         servers = self._regions
         random_region = False
         if region:
             if region not in servers:
-                raise ValueError(f"Region {region} don't exist in azure or doesn't have the required resources to create a proxy! Check the available regions with get_regions_by_size()")
+                raise ValueError(
+                    f"Region {region} don't exist in azure or doesn't have the required resources to create a proxy! Check the available regions with get_regions_by_size()"
+                )
         else:
             random_region = True
             shuffle(servers)
             region = choice(servers)
-        
+
         if auth:
             if not isinstance(auth, dict):
-                raise TypeError('Bad auth format, auth must be a dict')
-            
-            if 'user' not in auth.keys() or 'password' not in auth.keys():
-                raise KeyError('Auth dict must have two keys name and password')
-        
+                raise TypeError("Bad auth format, auth must be a dict")
+
+            if "user" not in auth.keys() or "password" not in auth.keys():
+                raise KeyError("Auth dict must have two keys name and password")
+
         ip = get_public_ip()
-        
+
         ips = []
         if allowed_ips:
             if isinstance(allowed_ips, str):
                 ips = [allowed_ips]
             else:
                 ips = allowed_ips
-            
-            if not all(search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?', ip) for ip in ips):
+
+            if not all(
+                search(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\\\d\d?)?", ip)
+                for ip in ips
+            ):
                 raise TypeError("IPs or ranges of ips with bad format!")
-        
+
         if ip not in ips:
             ips.append(ip)
-        
+
         if self.logger:
-            user_suffix = f" for the user {auth['user']}" if auth else " with no authentification"
-            self.logger.info(f"Starting a new azure proxy in the region {region}{user_suffix}...")
-        
-        proxy_ip, error = start_proxy(self, proxy_name, port, region, proxy_size, ips, auth.get('user', ''), auth.get('password', ''), is_async)
+            user_suffix = (
+                f" for the user {auth['user']}" if auth else " with no authentification"
+            )
+            self.logger.info(
+                f"Starting a new azure proxy in the region {region}{user_suffix}..."
+            )
+
+        proxy_ip, error = start_proxy(
+            self,
+            proxy_name,
+            port,
+            region,
+            proxy_size,
+            ips,
+            auth.get("user", ""),
+            auth.get("password", ""),
+            is_async,
+        )
         if error and retry and random_region:
             if self.logger:
-                self.logger.warning(f"Failed to start the azure proxy {proxy_name} in the region {region}. Retrying with a different region...")
-            
+                self.logger.warning(
+                    f"Failed to start the azure proxy {proxy_name} in the region {region}. Retrying with a different region..."
+                )
+
             # retry with another random region, excluding the previous one
             region = choice([x for x in servers if x != region])
-            proxy_ip, error = start_proxy(self, proxy_name, port, region, proxy_size, ips, auth.get('user', ''), auth.get('password', ''), is_async)
-        
+            proxy_ip, error = start_proxy(
+                self,
+                proxy_name,
+                port,
+                region,
+                proxy_size,
+                ips,
+                auth.get("user", ""),
+                auth.get("password", ""),
+                is_async,
+            )
+
         if error:
             # if it fails again, we try to delete the resource group just in case it was created and then raise an exception
             if self.logger:
-                self.logger.error(f"Failed to start the azure proxy {proxy_name} after retrying.")
+                self.logger.error(
+                    f"Failed to start the azure proxy {proxy_name} after retrying."
+                )
             try:
                 self._resource_client.resource_groups.begin_delete(proxy_name)
             finally:
-                raise Exception(f"Failed to start the azure proxy {proxy_name}, no public IP obtained.")
-        
-        return AzureProxy(self, proxy_name, proxy_ip, port, region, proxy_size, ips, is_async=is_async, user=auth.get('user', ''), password=auth.get('password', ''), logger=self.logger, reload=False, on_exit=on_exit)
-    
-    def get_proxy_by_name(self, name: str, is_async: bool = False, on_exit: Literal['destroy', 'keep'] = 'destroy') -> AzureProxy:
+                raise Exception(
+                    f"Failed to start the azure proxy {proxy_name}, no public IP obtained."
+                )
+
+        return AzureProxy(
+            self,
+            proxy_name,
+            proxy_ip,
+            port,
+            region,
+            proxy_size,
+            ips,
+            is_async=is_async,
+            user=auth.get("user", ""),
+            password=auth.get("password", ""),
+            logger=self.logger,
+            reload=False,
+            on_exit=on_exit,
+        )
+
+    def get_proxy_by_name(
+        self,
+        name: str,
+        is_async: bool = False,
+        on_exit: Literal["destroy", "keep"] = "destroy",
+    ) -> AzureProxy:
         """Reload an existing Azure proxy instance by its name.
 
         The method validates that the proxy exists, retrieves VM metadata and
@@ -528,45 +700,83 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             If the proxy port or VM size cannot be extracted from the
             instance data.
         """
-        
-        if not name in self.get_running_proxy_names():
+
+        if name not in self.get_running_proxy_names():
             raise NameError(f"No proxy with the name {name} has been found in Azure!")
-        
+
         instance = self._compute_client.virtual_machines.get(name, name)
-        
+
         region = instance.location
-        ip = self._network_client.public_ip_addresses.get(name, f"{name}-public-ip").ip_address
+        ip = self._network_client.public_ip_addresses.get(
+            name, f"{name}-public-ip"
+        ).ip_address
         if not ip:
             raise Exception(f"Failed to get the public IP for the azure proxy {name}.")
-        
-        ssh_client = SSHClient(ip, 'proxy-user')
-        _, startup_script, _ = ssh_client.run_command('cat /etc/squid/squid.conf')
+
+        ssh_client = SSHClient(ip, "proxy-user")
+        _, startup_script, _ = ssh_client.run_command("cat /etc/squid/squid.conf")
         if not startup_script:
             raise ConnectionError("Can't connect to the azure proxy!")
-        
+
         try:
-            port = int(search(r'http_port (\d+)', startup_script).group(1)) # type: ignore
-        except:
-            raise ValueError("Can't find the proxy port in the startup script of the Azure instance!")
-        
+            port = int(search(r"http_port (\d+)", startup_script).group(1))  # type: ignore
+        except Exception:
+            raise ValueError(
+                "Can't find the proxy port in the startup script of the Azure instance!"
+            )
+
         if not instance.hardware_profile or not instance.hardware_profile.vm_size:
-            raise ValueError("Can't find the proxy instance type in the Azure instance information!")
+            raise ValueError(
+                "Can't find the proxy instance type in the Azure instance information!"
+            )
         vm_size = instance.hardware_profile.vm_size
-        
+
         # Search IPs in the squid config file to get the allowed ips for the proxy
-        allowed_ips = [str(match.group(1)) for match in finditer(r'acl custom_ips src (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', startup_script)]
-        
-        auth_search = search(r'#auth credentials: user: (.+), password: (.+)\n', startup_script)
+        allowed_ips = [
+            str(match.group(1))
+            for match in finditer(
+                r"acl custom_ips src (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})",
+                startup_script,
+            )
+        ]
+
+        auth_search = search(
+            r"#auth credentials: user: (.+), password: (.+)\n", startup_script
+        )
         auth = {}
         if auth_search:
-            auth['user'] = auth_search.group(1)
-            auth['password'] = auth_search.group(2)
-        
+            auth["user"] = auth_search.group(1)
+            auth["password"] = auth_search.group(2)
+
         if self.logger:
-            user_suffix = f" for the user {auth['user']}" if auth else " with no authentification found"
-            self.logger.info(f"Azure proxy {name} reloaded with IP {ip} and port {port}{user_suffix}...")
-        
-        return AzureProxy(self, name, ip, port, region, proxy_instance=vm_size, allowed_ips=allowed_ips, is_async=is_async, user=auth.get('user', ''), password=auth.get('password', ''), logger=self.logger, reload=True, on_exit=on_exit)
-    
+            user_suffix = (
+                f" for the user {auth['user']}"
+                if auth
+                else " with no authentification found"
+            )
+            self.logger.info(
+                f"Azure proxy {name} reloaded with IP {ip} and port {port}{user_suffix}..."
+            )
+
+        return AzureProxy(
+            self,
+            name,
+            ip,
+            port,
+            region,
+            proxy_instance=vm_size,
+            allowed_ips=allowed_ips,
+            is_async=is_async,
+            user=auth.get("user", ""),
+            password=auth.get("password", ""),
+            logger=self.logger,
+            reload=True,
+            on_exit=on_exit,
+        )
+
     def get_running_proxy_names(self) -> list[str]:
-        return [x.name for x in self._resource_client.resource_groups.list() if x.name and x.tags and x.tags.get('type', '') == 'proxy']
+        return [
+            x.name
+            for x in self._resource_client.resource_groups.list()
+            if x.name and x.tags and x.tags.get("type", "") == "proxy"
+        ]

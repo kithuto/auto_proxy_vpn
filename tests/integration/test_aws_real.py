@@ -74,12 +74,12 @@ class TestAwsIntegration:
 
     def test_create_batch_via_pool(self, manager: ProxyManagerAws):
         batch = manager.get_proxies(2, sizes="small", on_exit="destroy")
-        
+
         for proxy in batch:
             assert proxy.is_active(wait=True)
             assert proxy.ip
             assert proxy.port > 0
-        
+
         names = manager.get_running_proxy_names()
         assert isinstance(names, list)
         try:

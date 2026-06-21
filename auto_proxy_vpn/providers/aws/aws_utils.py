@@ -1,4 +1,3 @@
-from types import ModuleType
 from typing import TYPE_CHECKING
 
 from auto_proxy_vpn.utils.files_utils import get_squid_file
@@ -7,7 +6,10 @@ from .aws_exceptions import AwsUnauthorizedOperationError
 if TYPE_CHECKING:
     from .aws_proxy import ProxyManagerAws
 
-def get_region_instances(proxy_manager: "ProxyManagerAws", region: str) -> list[tuple[str, str]]:
+
+def get_region_instances(
+    proxy_manager: "ProxyManagerAws", region: str
+) -> list[tuple[str, str]]:
     """List active proxy instances in a specific AWS region.
 
     This helper queries EC2 instances tagged as proxy resources and returns
@@ -32,24 +34,44 @@ def get_region_instances(proxy_manager: "ProxyManagerAws", region: str) -> list[
     Exception
         Propagates exceptions raised by the AWS SDK request.
     """
-    client = proxy_manager._boto3.client("ec2", region_name=region, aws_access_key_id=proxy_manager._aws_access_key_id, aws_secret_access_key=proxy_manager._aws_secret_access_key)
+    client = proxy_manager._boto3.client(
+        "ec2",
+        region_name=region,
+        aws_access_key_id=proxy_manager._aws_access_key_id,
+        aws_secret_access_key=proxy_manager._aws_secret_access_key,
+    )
     response = client.describe_instances(
         Filters=[
-            {"Name": "tag:Type", "Values": ['proxy']},
-            {"Name": "instance-state-name", "Values": ["pending", "running"]}
+            {"Name": "tag:Type", "Values": ["proxy"]},
+            {"Name": "instance-state-name", "Values": ["pending", "running"]},
         ]
     )
     instance_names = []
-    if response['Reservations']:
-        for reservation in response['Reservations']:
-            for instance in reservation['Instances']:
-                instance_name = [tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'Name']
+    if response["Reservations"]:
+        for reservation in response["Reservations"]:
+            for instance in reservation["Instances"]:
+                instance_name = [
+                    tag["Value"]
+                    for tag in instance.get("Tags", [])
+                    if tag["Key"] == "Name"
+                ]
                 if instance_name:
                     instance_names.append((instance_name[0], region))
-    
+
     return instance_names
 
-def start_proxy(proxy_manager: "ProxyManagerAws", proxy_name: str, port: int, region: str, machine_type: str, allowed_ips: list[str], user: str = '', password: str = '', is_async: bool = False) -> tuple[str, str, str, bool]:
+
+def start_proxy(
+    proxy_manager: "ProxyManagerAws",
+    proxy_name: str,
+    port: int,
+    region: str,
+    machine_type: str,
+    allowed_ips: list[str],
+    user: str = "",
+    password: str = "",
+    is_async: bool = False,
+) -> tuple[str, str, str, bool]:
     """Create and start an EC2 instance configured as an HTTP proxy.
 
     This helper resolves the latest AMI that matches configured filters,
@@ -93,19 +115,29 @@ def start_proxy(proxy_manager: "ProxyManagerAws", proxy_name: str, port: int, re
     Exception
         Propagates non-handled AWS SDK errors.
     """
-    
-    ec2 = proxy_manager._boto3.resource("ec2", region_name=region, aws_access_key_id=proxy_manager._aws_access_key_id, aws_secret_access_key=proxy_manager._aws_secret_access_key)
-    client = proxy_manager._boto3.client("ec2", region_name=region, aws_access_key_id=proxy_manager._aws_access_key_id, aws_secret_access_key=proxy_manager._aws_secret_access_key)
-    
-    # search for the image ami id
-    response = client.describe_images(
-        Filters=proxy_manager._os_image_filters
+
+    ec2 = proxy_manager._boto3.resource(
+        "ec2",
+        region_name=region,
+        aws_access_key_id=proxy_manager._aws_access_key_id,
+        aws_secret_access_key=proxy_manager._aws_secret_access_key,
     )
+    client = proxy_manager._boto3.client(
+        "ec2",
+        region_name=region,
+        aws_access_key_id=proxy_manager._aws_access_key_id,
+        aws_secret_access_key=proxy_manager._aws_secret_access_key,
+    )
+
+    # search for the image ami id
+    response = client.describe_images(Filters=proxy_manager._os_image_filters)
     try:
-        ami_id = sorted(response['Images'], key=lambda x: x['CreationDate'], reverse=True)[0]['ImageId']
-    except:
-        return '', '', '', True
-    
+        ami_id = sorted(
+            response["Images"], key=lambda x: x["CreationDate"], reverse=True
+        )[0]["ImageId"]
+    except Exception:
+        return "", "", "", True
+
     # First of all a firewall must be created or reloaded. Openning the proxy port for the IPs the user specified
     security_group_name = f"{proxy_name}-firewall"
     response = client.create_security_group(
@@ -122,20 +154,24 @@ def start_proxy(proxy_manager: "ProxyManagerAws", proxy_name: str, port: int, re
                 "IpProtocol": "tcp",
                 "FromPort": 22,
                 "ToPort": 22,
-                "IpRanges": [{"CidrIp": f"{x}/32" if '/' not in x else x} for x in allowed_ips],
+                "IpRanges": [
+                    {"CidrIp": f"{x}/32" if "/" not in x else x} for x in allowed_ips
+                ],
             },
             {
                 "IpProtocol": "tcp",
                 "FromPort": port,
                 "ToPort": port,
-                "IpRanges": [{"CidrIp": f"{x}/32" if '/' not in x else x} for x in allowed_ips],
+                "IpRanges": [
+                    {"CidrIp": f"{x}/32" if "/" not in x else x} for x in allowed_ips
+                ],
             },
         ],
     )
-    
+
     # create the instance with the user data script that will install and start the proxy
     try:
-        instances = ec2.create_instances( # type: ignore
+        instances = ec2.create_instances(  # type: ignore
             ImageId=ami_id,
             InstanceType=machine_type,
             MinCount=1,
@@ -146,28 +182,32 @@ def start_proxy(proxy_manager: "ProxyManagerAws", proxy_name: str, port: int, re
                     "ResourceType": "instance",
                     "Tags": [
                         {"Key": "Name", "Value": proxy_name},
-                        {"Key": "Type", "Value": "proxy"}
-                    ]
+                        {"Key": "Type", "Value": "proxy"},
+                    ],
                 }
             ],
-            UserData=get_squid_file(port, allowed_ips=allowed_ips, ssh_keys=proxy_manager.ssh_keys)
+            UserData=get_squid_file(
+                port, allowed_ips=allowed_ips, ssh_keys=proxy_manager.ssh_keys
+            ),
         )
     except proxy_manager._aws_ClientError as e:
         # remove the security group created for the proxy in case of any error to avoid leaving unused resources in the cloud
         client.delete_security_group(GroupId=security_group_id)
-        
+
         error_code = e.response["Error"]["Code"]
-        
+
         if error_code == "UnauthorizedOperation":
-            raise AwsUnauthorizedOperationError("Check in the AWS console the regions where your credentials have permissions to create instances and use those regions when creating proxies.")
+            raise AwsUnauthorizedOperationError(
+                "Check in the AWS console the regions where your credentials have permissions to create instances and use those regions when creating proxies."
+            )
         elif error_code == "InsufficientInstanceCapacity":
-            return '', '', '', True
+            return "", "", "", True
         else:
             raise e
-    
+
     instance = instances[0]
     if not is_async:
         instance.wait_until_running()
         instance.reload()
-    
+
     return instance.public_ip_address, instance.id, security_group_id, False

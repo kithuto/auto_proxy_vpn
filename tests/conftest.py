@@ -31,6 +31,7 @@ from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager, ProxyBa
 # Concrete stubs for abstract classes (used by many tests)
 # ---------------------------------------------------------------------------
 
+
 class StubProxy(BaseProxy):
     """Minimal concrete proxy for unit-testing base behaviour."""
 
@@ -99,12 +100,15 @@ class StubProxyManager(BaseProxyManager[StubProxy]):
         return StubProxy(name=name)
 
     def get_running_proxy_names(self):
-        return [f"{self.label}-proxy-{i}" for i in range(1, len(self._get_proxy_calls) + 1)]
+        return [
+            f"{self.label}-proxy-{i}" for i in range(1, len(self._get_proxy_calls) + 1)
+        ]
 
 
 # ---------------------------------------------------------------------------
 # Fixtures — Configs
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def runtime_config():
@@ -161,6 +165,7 @@ def aws_config():
 # Fixtures — Stubs
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def stub_proxy():
     return StubProxy()
@@ -198,6 +203,7 @@ def proxy_batch():
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_do_regions_response(slugs: list[str] | None = None):
     """Build a fake DigitalOcean /v2/regions JSON body."""
     slugs = slugs or ["nyc1", "sfo3", "ams3", "lon1"]
@@ -214,14 +220,17 @@ def make_do_regions_response(slugs: list[str] | None = None):
     }
 
 
-def make_do_droplet(droplet_id: int = 123, name: str = "proxy1", ip: str = "10.0.0.1", status: str = "active"):
+def make_do_droplet(
+    droplet_id: int = 123,
+    name: str = "proxy1",
+    ip: str = "10.0.0.1",
+    status: str = "active",
+):
     """Return a minimal DigitalOcean droplet dict."""
     return {
         "id": droplet_id,
         "name": name,
         "status": status,
         "region": {"slug": "nyc1"},
-        "networks": {
-            "v4": [{"type": "public", "ip_address": ip}]
-        },
+        "networks": {"v4": [{"type": "public", "ip_address": ip}]},
     }

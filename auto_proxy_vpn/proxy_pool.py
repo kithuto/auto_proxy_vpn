@@ -3,8 +3,11 @@ from logging import INFO, Logger, basicConfig, getLogger
 from typing import Literal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from auto_proxy_vpn import ProxyManagers, BaseConfig, ManagerRuntimeConfig, CloudProvider
+from auto_proxy_vpn.cloud_provider import CloudProvider
+from auto_proxy_vpn.configs import BaseConfig, ManagerRuntimeConfig
+from auto_proxy_vpn.manager_register import ProxyManagers
 from auto_proxy_vpn.utils.base_proxy import BaseProxyManager, BaseProxy, ProxyBatch
+
 
 class RandomManagerPicker:
     def __init__(self, managers: list[tuple[CloudProvider, BaseProxyManager]]):
@@ -28,23 +31,24 @@ class RandomManagerPicker:
         self._managers: list[tuple[CloudProvider, BaseProxyManager]] = managers
         self._bag = []
         self._refill_bag()
-    
+
     def _refill_bag(self):
         """Refill the internal bag with all managers and shuffle it in place."""
         self._bag = self._managers.copy()
         shuffle(self._bag)
-    
+
     def next(self) -> tuple[CloudProvider, BaseProxyManager]:
         """Return the next manager, refilling the bag when needed."""
         if not self._bag:
             self._refill_bag()
         return self._bag.pop()
-    
+
     def __iter__(self):
         return self
-    
+
     def __next__(self) -> tuple[CloudProvider, BaseProxyManager]:
         return self.next()
+
 
 class ProxyPool:
     """High-level orchestrator for creating proxies across cloud providers.
@@ -60,15 +64,18 @@ class ProxyPool:
     - At most one configuration per provider is accepted.
     - Manager-specific validation is delegated to each provider manager.
     """
-    def __init__(self,
-                 *provider_configs: BaseConfig,
-                 log: bool = True,
-                 log_file: str | None = None,
-                 log_format: str = '%(asctime)-10s %(levelname)-5s %(message)s',
-                 logger: Logger | None = None):
-        """Build a proxy pool and initialize provider managers. Supports multiple 
-        accounts per provider by passing multiple configurations. To be able to use multiple 
-        managers for the same provider the credentials must be different, otherwise an error 
+
+    def __init__(
+        self,
+        *provider_configs: BaseConfig,
+        log: bool = True,
+        log_file: str | None = None,
+        log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
+        logger: Logger | None = None,
+    ):
+        """Build a proxy pool and initialize provider managers. Supports multiple
+        accounts per provider by passing multiple configurations. To be able to use multiple
+        managers for the same provider the credentials must be different, otherwise an error
         will be raised since the managers would be indistinguishable.
 
         Parameters
@@ -94,7 +101,7 @@ class ProxyPool:
         ValueError
             If no providers are supplied, if providers contain duplicates, or
             if provider configurations are duplicated by provider.
-        
+
         Examples
         --------
         Single provider with config::
@@ -116,14 +123,14 @@ class ProxyPool:
             with pool.create_one() as proxy:
                 # do something with the proxy
                 pass
-        
+
         """
-        
+
         self.managers: list[tuple[CloudProvider, BaseProxyManager]] = []
         self._check_provider_configs(provider_configs)
         self._initialize_managers(provider_configs, log, log_file, log_format, logger)
         self.random_manager_picker = RandomManagerPicker(self.managers)
-    
+
     def _check_provider_configs(self, provider_configs: tuple[BaseConfig, ...]):
         """Validate provider configurations for duplicates and consistency.
 
@@ -137,50 +144,63 @@ class ProxyPool:
         ValueError
             If any of the above conditions are violated.
         """
-        
+
         if not provider_configs:
             raise ValueError("At least one provider configuration must be supplied.")
-        
+
         seen_configs = set()
         for config in provider_configs:
             if config.unique_key() in seen_configs:
-                raise ValueError(f"Duplicate configuration detected for provider {config.provider}")
+                raise ValueError(
+                    f"Duplicate configuration detected for provider {config.provider}"
+                )
             seen_configs.add(config.unique_key())
-    
-    def _initialize_managers(self, provider_configs: tuple[BaseConfig, ...], log: bool, log_file: str | None, log_format: str, logger: Logger | None):
+
+    def _initialize_managers(
+        self,
+        provider_configs: tuple[BaseConfig, ...],
+        log: bool,
+        log_file: str | None,
+        log_format: str,
+        logger: Logger | None,
+    ):
         """Instantiate and store one manager per configured provider.
 
         This method sets up a shared logger (when requested and no external
         logger is provided), resolves the manager class for each provider, and
         creates manager instances using ``from_config``.
         """
-        
+
         # all the managers will always share the same logger
         self.logger = logger
         if log and not logger:
-            basicConfig(filename=log_file,
-                    format=log_format,
-                    filemode='a',
-                    datefmt='%d-%b-%Y %H:%M:%S',
-                    level=INFO)
-            self.logger = getLogger('proxy_logger')
-        
+            basicConfig(
+                filename=log_file,
+                format=log_format,
+                filemode="a",
+                datefmt="%d-%b-%Y %H:%M:%S",
+                level=INFO,
+            )
+            self.logger = getLogger("proxy_logger")
+
         for provider_config in provider_configs:
             manager_cls = ProxyManagers.get_manager(provider_config.provider)
             runtime_config = ManagerRuntimeConfig(log=log, logger=self.logger)
             manager = manager_cls.from_config(provider_config, runtime_config)
             self.managers.append((provider_config.provider, manager))
-    
-    def create_one(self,
-                   port: int = 0,
-                   size: Literal['small', 'medium', 'large'] = 'medium',
-                   region: dict[CloudProvider, str] = {},
-                   auth: dict[Literal['user', 'password'], str] = {},
-                   allowed_ips: str | list[str] = [],
-                   is_async: bool = False,
-                   retry: bool = True,
-                   proxy_name: str = '',
-                   on_exit: Literal['keep', 'destroy'] = 'destroy') -> BaseProxy:
+
+    def create_one(
+        self,
+        port: int = 0,
+        size: Literal["small", "medium", "large"] = "medium",
+        region: dict[CloudProvider, str] = {},
+        auth: dict[Literal["user", "password"], str] = {},
+        allowed_ips: str | list[str] = [],
+        is_async: bool = False,
+        retry: bool = True,
+        proxy_name: str = "",
+        on_exit: Literal["keep", "destroy"] = "destroy",
+    ) -> BaseProxy:
         """Create a single proxy using the next randomly selected manager.
 
         Parameters
@@ -209,21 +229,35 @@ class ProxyPool:
         BaseProxy
             The created proxy instance.
         """
-        
+
         cloud_provider, manager = self.random_manager_picker.next()
-        return manager.get_proxy(port, size, region.get(cloud_provider, ''), auth, allowed_ips, is_async, retry, proxy_name, on_exit)
-    
-    def create_batch(self,
-                     count: int,
-                     ports: list[int] | int = 0,
-                     sizes: list[Literal['small', 'medium', 'large']] | Literal['small', 'medium', 'large'] = 'medium',
-                     regions: dict[CloudProvider, list[str] | str] = {},
-                     auths: list[dict[Literal['user', 'password'], str]] | dict[Literal['user', 'password'], str] = {},
-                     allowed_ips: list[str] | str = [],
-                     is_async: bool = True,
-                     retry: bool = True,
-                     proxy_names: list[str] | str = '',
-                     on_exit: Literal['keep', 'destroy'] = 'destroy') -> ProxyBatch[BaseProxy]:
+        return manager.get_proxy(
+            port,
+            size,
+            region.get(cloud_provider, ""),
+            auth,
+            allowed_ips,
+            is_async,
+            retry,
+            proxy_name,
+            on_exit,
+        )
+
+    def create_batch(
+        self,
+        count: int,
+        ports: list[int] | int = 0,
+        sizes: list[Literal["small", "medium", "large"]]
+        | Literal["small", "medium", "large"] = "medium",
+        regions: dict[CloudProvider, list[str] | str] = {},
+        auths: list[dict[Literal["user", "password"], str]]
+        | dict[Literal["user", "password"], str] = {},
+        allowed_ips: list[str] | str = [],
+        is_async: bool = True,
+        retry: bool = True,
+        proxy_names: list[str] | str = "",
+        on_exit: Literal["keep", "destroy"] = "destroy",
+    ) -> ProxyBatch[BaseProxy]:
         """Create multiple proxies distributed as evenly as possible.
 
         The requested ``count`` is split across configured providers using an
@@ -243,12 +277,14 @@ class ProxyPool:
         If a provider manager handles internal failures by returning fewer
         proxies, the resulting batch may contain fewer proxies than requested.
         """
-        
+
         base = count // len(self.managers)
         remainder = count % len(self.managers)
-        
-        distribution = [base + (1 if i < remainder else 0) for i in range(len(self.managers))]
-        
+
+        distribution = [
+            base + (1 if i < remainder else 0) for i in range(len(self.managers))
+        ]
+
         proxies = []
         futures = []
         with ThreadPoolExecutor(max_workers=min((10, len(self.managers)))) as executor:
@@ -261,7 +297,7 @@ class ProxyPool:
                             num_proxies,
                             ports,
                             sizes,
-                            regions.get(cloud_provider, ''),
+                            regions.get(cloud_provider, ""),
                             auths,
                             allowed_ips,
                             is_async,
@@ -272,10 +308,14 @@ class ProxyPool:
                     )
             for future in as_completed(futures):
                 proxies.extend(future.result().proxies)
-        
+
         return ProxyBatch[BaseProxy](proxies)
-    
-    def get_sizes_and_regions(self, provider: CloudProvider) -> dict[Literal['small', 'medium', 'large'], list[str] | list[tuple[str, list[str]]]]:
+
+    def get_sizes_and_regions(
+        self, provider: CloudProvider
+    ) -> dict[
+        Literal["small", "medium", "large"], list[str] | list[tuple[str, list[str]]]
+    ]:
         """Get available regions for a specific provider.
 
         Parameters
@@ -293,14 +333,16 @@ class ProxyPool:
         ValueError
             If the specified provider is not configured in the pool.
         """
-        
+
         for cloud_provider, manager in self.managers:
             if cloud_provider == provider:
                 return manager.get_sizes_and_regions()
-        
+
         raise ValueError(f"Provider {provider} is not configured in this ProxyPool.")
-    
-    def get_regions_by_size(self, provider: CloudProvider, size: Literal['small', 'medium', 'large']) -> list[str] | list[tuple[str, list[str]]]:
+
+    def get_regions_by_size(
+        self, provider: CloudProvider, size: Literal["small", "medium", "large"]
+    ) -> list[str] | list[tuple[str, list[str]]]:
         """Get available regions for a specific provider and proxy size.
 
         Parameters
@@ -321,19 +363,21 @@ class ProxyPool:
             If the specified provider is not configured in the pool or if the
             specified size is invalid for that provider.
         """
-        
+
         sizes_and_regions = self.get_sizes_and_regions(provider)
         if size not in sizes_and_regions:
             raise ValueError(f"Size {size} is not valid.")
-        
+
         return sizes_and_regions[size]
-    
-    def get_running_proxy_names(self) -> dict[CloudProvider, dict[str, list[str] | list[tuple[str, str]]]]:
+
+    def get_running_proxy_names(
+        self,
+    ) -> dict[CloudProvider, dict[str, list[str] | list[tuple[str, str]]]]:
         """Get names of currently running proxies grouped by provider and account.
 
-        This method supports multiple accounts for a single provider. For each 
-        provider, entries are grouped by account order using keys ``account_1``, 
-        ``account_2``, etc. 
+        This method supports multiple accounts for a single provider. For each
+        provider, entries are grouped by account order using keys ``account_1``,
+        ``account_2``, etc.
         Account numbering preserves the same order used when configs were
         passed to :class:`ProxyPool` during initialization.
 
@@ -359,12 +403,16 @@ class ProxyPool:
             }
         """
 
-        running_names_by_account: dict[CloudProvider, dict[str, list[str] | list[tuple[str, str]]]] = {}
+        running_names_by_account: dict[
+            CloudProvider, dict[str, list[str] | list[tuple[str, str]]]
+        ] = {}
         provider_counts: dict[CloudProvider, int] = {}
 
         for cloud_provider, manager in self.managers:
             provider_counts[cloud_provider] = provider_counts.get(cloud_provider, 0) + 1
             account_key = f"account_{provider_counts[cloud_provider]}"
-            running_names_by_account.setdefault(cloud_provider, {})[account_key] = manager.get_running_proxy_names()
+            running_names_by_account.setdefault(cloud_provider, {})[account_key] = (
+                manager.get_running_proxy_names()
+            )
 
         return running_names_by_account

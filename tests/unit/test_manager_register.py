@@ -27,7 +27,7 @@ class TestProxyManagersRegistry:
     def test_get_manager_raises_for_unknown_provider(self):
         """Requesting an unregistered provider must raise ValueError."""
         with pytest.raises(ValueError, match="No manager registered"):
-            ProxyManagers.get_manager("nonexistent_provider") # type: ignore
+            ProxyManagers.get_manager("nonexistent_provider")  # type: ignore
 
     def test_double_registration_raises(self):
         """Registering the same provider twice must raise ValueError."""
@@ -35,6 +35,7 @@ class TestProxyManagersRegistry:
         provider = CloudProvider.DIGITALOCEAN
 
         with pytest.raises(ValueError, match="already registered"):
+
             @ProxyManagers.register(provider)
             class DuplicateManager(BaseProxyManager):
                 pass

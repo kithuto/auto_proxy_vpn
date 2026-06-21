@@ -48,7 +48,9 @@ class TestGetAvailableRegionsBySize:
             AggregatedListMachineTypesRequest=lambda **kwargs: kwargs,
         )
 
-        zone_with_types = SimpleNamespace(machine_types=[SimpleNamespace(name="e2-micro")])
+        zone_with_types = SimpleNamespace(
+            machine_types=[SimpleNamespace(name="e2-micro")]
+        )
         zone_empty = SimpleNamespace(machine_types=[])
 
         machine_types_client = SimpleNamespace(
@@ -94,22 +96,30 @@ class TestStartProxy:
         class ServiceUnavailable(Exception):
             pass
 
-        manager._google_exceptions = SimpleNamespace(ServiceUnavailable=ServiceUnavailable)
+        manager._google_exceptions = SimpleNamespace(
+            ServiceUnavailable=ServiceUnavailable
+        )
         return manager, ServiceUnavailable
 
     def test_returns_ip_when_operation_succeeds(self, monkeypatch):
         manager, _ = self._build_manager()
 
-        operation = SimpleNamespace(result=lambda timeout=0: None, error_code=None, warnings=[])
+        operation = SimpleNamespace(
+            result=lambda timeout=0: None, error_code=None, warnings=[]
+        )
         manager._instances_client.insert = lambda request: operation
         manager._instances_client.get = lambda request: SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.1.2.3")])]
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.1.2.3")])
+            ]
         )
 
-        monkeypatch.setattr(google_utils, "get_squid_file", lambda *args, **kwargs: "#!/bin/bash")
+        monkeypatch.setattr(
+            google_utils, "get_squid_file", lambda *args, **kwargs: "#!/bin/bash"
+        )
 
         ip, error = google_utils.start_proxy(
-            proxy_manager=manager, # type: ignore
+            proxy_manager=manager,  # type: ignore
             proxy_name="proxy1",
             port=3128,
             region="us-central1",
@@ -126,20 +136,28 @@ class TestStartProxy:
     def test_returns_error_when_zone_unavailable_and_no_fallback(self, monkeypatch):
         manager, service_unavailable = self._build_manager()
 
-        operation = SimpleNamespace(result=lambda timeout=0: None, error_code=None, warnings=[])
+        operation = SimpleNamespace(
+            result=lambda timeout=0: None, error_code=None, warnings=[]
+        )
         manager._instances_client.insert = lambda request: operation
         manager._instances_client.get = lambda request: SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.1.2.3")])]
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.1.2.3")])
+            ]
         )
 
         def raise_unavailable(*args, **kwargs):
             raise service_unavailable("zone unavailable")
 
-        monkeypatch.setattr(google_utils, "wait_for_extended_operation", raise_unavailable)
-        monkeypatch.setattr(google_utils, "get_squid_file", lambda *args, **kwargs: "#!/bin/bash")
+        monkeypatch.setattr(
+            google_utils, "wait_for_extended_operation", raise_unavailable
+        )
+        monkeypatch.setattr(
+            google_utils, "get_squid_file", lambda *args, **kwargs: "#!/bin/bash"
+        )
 
         ip, error = google_utils.start_proxy(
-            proxy_manager=manager, # type: ignore
+            proxy_manager=manager,  # type: ignore
             proxy_name="proxy1",
             port=3128,
             region="us-central1",
