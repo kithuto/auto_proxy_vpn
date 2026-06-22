@@ -10,6 +10,15 @@ from .exceptions import ProxyIpNotAvailableException
 T = TypeVar("T", bound="BaseProxy")
 
 
+def normalize_get_proxy_by_name_options(
+    is_async: bool,
+    auth: dict[Literal["user", "password"], str] | None,
+) -> tuple[bool, dict[Literal["user", "password"], str] | None]:
+    if not isinstance(is_async, bool):
+        raise TypeError("is_async must be a bool")
+    return is_async, auth
+
+
 class BaseProxy(ABC):
     ip: str
     name: str
@@ -264,8 +273,8 @@ class BaseProxyManager(ABC, Generic[T]):
     def get_proxy_by_name(
         self,
         name: str,
-        auth: dict[Literal["user", "password"], str] | None = None,
         is_async: bool = False,
+        auth: dict[Literal["user", "password"], str] | None = None,
         on_exit: Literal["destroy", "keep"] = "destroy",
     ) -> T: ...
 

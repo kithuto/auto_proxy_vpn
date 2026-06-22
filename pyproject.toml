@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "auto_proxy_vpn"
 version = "0.3.0"
-description = "A package to create on demand proxies and vpns in different cloud providers."
-keywords = ["vpn", "proxy", "networking", "cloud", "security", "web scrapping"]
+description = "A package to create on demand HTTP(S) proxies in different cloud providers."
+keywords = ["proxy", "networking", "cloud", "security", "web scrapping"]
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

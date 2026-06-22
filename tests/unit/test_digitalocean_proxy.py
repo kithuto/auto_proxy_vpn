@@ -275,8 +275,12 @@ class TestProxyManagerDigitalOceanGetProxy:
             "auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.start_proxy",
             return_value=(0, "", True),
         ):
-            with pytest.raises(ConnectionError, match="creating the proxy"):
-                mgr.get_proxy(is_async=True)
+            with patch(
+                "auto_proxy_vpn.providers.digitalocean.digitalocean_proxy.get_public_ip",
+                return_value="1.2.3.4",
+            ):
+                with pytest.raises(ConnectionError, match="creating the proxy"):
+                    mgr.get_proxy(is_async=True)
 
 
 # ============================================================================
@@ -943,6 +947,6 @@ class TestProxyManagerDigitalOceanGetProxyExtra:
                 proxy = mgr.get_proxy(allowed_ips="8.8.8.8", is_async=True)
 
         passed_allowed_ips = mock_start.call_args.args[9]
-        assert passed_allowed_ips == ["8.8.8.8"]
+        assert passed_allowed_ips == ["8.8.8.8/32"]
         assert proxy.ip == "10.0.0.9"
         assert mgr.logger.info.called

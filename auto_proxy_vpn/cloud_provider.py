@@ -8,5 +8,3 @@ class CloudProvider(str, Enum):
     AZURE = "azure"
     DIGITALOCEAN = "digitalocean"
     AWS = "aws"
-    # ALIBABA = "alibaba"
-    # ORACLE = "oracle"

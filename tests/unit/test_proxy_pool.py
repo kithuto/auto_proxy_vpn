@@ -180,23 +180,23 @@ class TestProxyPoolLogging:
     def test_initializes_shared_logger_when_log_enabled_and_no_logger(self):
         config = DigitalOceanConfig(token="tok-log", ssh_key="key")
 
-        with patch("auto_proxy_vpn.proxy_pool.basicConfig") as mock_basic_config:
-            with patch("auto_proxy_vpn.proxy_pool.getLogger") as mock_get_logger:
-                with patch(
-                    "auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager"
-                ) as mock_get_manager:
-                    mock_logger = MagicMock()
-                    mock_get_logger.return_value = mock_logger
+        with patch("auto_proxy_vpn.proxy_pool.get_proxy_logger") as mock_get_logger:
+            with patch(
+                "auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager"
+            ) as mock_get_manager:
+                mock_logger = MagicMock()
+                mock_get_logger.return_value = mock_logger
 
-                    manager_cls = MagicMock()
-                    manager_cls.from_config.return_value = StubProxyManager("do")
-                    mock_get_manager.return_value = manager_cls
+                manager_cls = MagicMock()
+                manager_cls.from_config.return_value = StubProxyManager("do")
+                mock_get_manager.return_value = manager_cls
 
-                    pool = ProxyPool(config, log=True, logger=None)
+                pool = ProxyPool(config, log=True, logger=None)
 
         assert len(pool.managers) == 1
-        mock_basic_config.assert_called_once()
-        mock_get_logger.assert_called_once_with("proxy_logger")
+        mock_get_logger.assert_called_once()
+        runtime_config = mock_get_manager.return_value.from_config.call_args.args[1]
+        assert runtime_config.logger is mock_logger
 
 
 class TestProxyPoolRunningNames:

@@ -235,8 +235,9 @@ def start_proxy(
     # delete NetworkWatcherRG (only if exists) to avoid aditional billing. No need to wait for it to finish
     try:
         _ = manager._resource_client.resource_groups.begin_delete("NetworkWatcherRG")
-    except Exception:
-        pass
+    except Exception as exc:
+        if manager.logger:
+            manager.logger.warning("Failed to delete NetworkWatcherRG: %s", exc)
 
     image_version = get_last_avaliable_sku_version(
         manager._compute_client,

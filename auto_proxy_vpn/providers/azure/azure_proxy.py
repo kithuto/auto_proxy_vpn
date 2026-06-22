@@ -1,5 +1,5 @@
 from typing import Literal
-from logging import INFO, ERROR, Logger, basicConfig, getLogger
+from logging import ERROR, Logger, getLogger
 from os import environ
 from os.path import isfile
 from random import choice, randint, shuffle
@@ -13,12 +13,21 @@ from auto_proxy_vpn import (
     ManagerRuntimeConfig,
     AzureConfig,
 )
-from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
+from auto_proxy_vpn.utils.base_proxy import (
+    BaseProxy,
+    BaseProxyManager,
+    normalize_get_proxy_by_name_options,
+)
 from auto_proxy_vpn.utils.proxy_auth import (
     normalize_proxy_auth,
     resolve_reloaded_proxy_auth,
 )
-from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key, normalize_allowed_ips
+from auto_proxy_vpn.utils.util import (
+    get_proxy_logger,
+    get_public_ip,
+    is_ssh_key,
+    normalize_allowed_ips,
+)
 from auto_proxy_vpn.utils.ssh_client import SSHClient
 from .azure_utils import start_proxy
 
@@ -351,16 +360,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             )
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
-        self.logger = logger
-        if self.log and not logger:
-            basicConfig(
-                filename=log_file,
-                format=self.log_format,
-                filemode="a",
-                datefmt="%d-%b-%Y %H:%M:%S",
-                level=INFO,
-            )
-            self.logger = getLogger("proxy_logger")
+        self.logger = get_proxy_logger(log, log_file, self.log_format, logger)
 
         # check azure imports
         try:
@@ -570,7 +570,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
 
         auth = normalize_proxy_auth(auth)
 
-        ip = get_public_ip()
+        ip = normalize_allowed_ips(get_public_ip())[0]
 
         ips = normalize_allowed_ips(allowed_ips)
 
@@ -646,8 +646,8 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
     def get_proxy_by_name(
         self,
         name: str,
-        auth: dict[Literal["user", "password"], str] | None = None,
         is_async: bool = False,
+        auth: dict[Literal["user", "password"], str] | None = None,
         on_exit: Literal["destroy", "keep"] = "destroy",
     ) -> AzureProxy:
         """Reload an existing Azure proxy instance by its name.
@@ -686,6 +686,7 @@ class ProxyManagerAzure(BaseProxyManager[AzureProxy]):
             If the proxy port or VM size cannot be extracted from the
             instance data.
         """
+        is_async, auth = normalize_get_proxy_by_name_options(is_async, auth)
 
         if name not in self.get_running_proxy_names():
             raise NameError(f"No proxy with the name {name} has been found in Azure!")

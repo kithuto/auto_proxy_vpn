@@ -1,9 +1,21 @@
 """Tests for BaseProxy, ProxyBatch, and BaseProxyManager base behaviour."""
 
+from inspect import signature
+
 import pytest
 from unittest.mock import patch
 
-from auto_proxy_vpn.utils.base_proxy import ProxyBatch
+from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
+from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import (
+    ProxyManagerDigitalOcean,
+)
+from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
+from auto_proxy_vpn.utils.base_proxy import (
+    BaseProxyManager,
+    ProxyBatch,
+    normalize_get_proxy_by_name_options,
+)
 from auto_proxy_vpn.utils.exceptions import ProxyIpNotAvailableException
 from tests.conftest import StubProxy
 
@@ -11,6 +23,44 @@ from tests.conftest import StubProxy
 # ============================================================================
 # BaseProxy
 # ============================================================================
+
+
+class TestGetProxyByNameSignature:
+    """Contract for backwards-compatible positional arguments."""
+
+    @pytest.mark.parametrize(
+        "manager_cls",
+        [
+            BaseProxyManager,
+            ProxyManagerAws,
+            ProxyManagerAzure,
+            ProxyManagerDigitalOcean,
+            ProxyManagerGoogle,
+        ],
+    )
+    def test_is_async_stays_before_auth(self, manager_cls):
+        params = list(signature(manager_cls.get_proxy_by_name).parameters)
+        assert params[:5] == ["self", "name", "is_async", "auth", "on_exit"]
+
+    def test_auth_dict_as_second_positional_argument_is_rejected(self):
+        auth = {"user": "alice", "password": "secret"}
+
+        with pytest.raises(TypeError, match="is_async"):
+            normalize_get_proxy_by_name_options(auth, None)
+
+    def test_is_async_as_second_positional_argument_is_still_supported(self):
+        is_async, auth = normalize_get_proxy_by_name_options(True, None)
+
+        assert is_async is True
+        assert auth is None
+
+    def test_auth_keyword_is_still_supported(self):
+        auth = {"user": "alice", "password": "secret"}
+
+        is_async, normalized_auth = normalize_get_proxy_by_name_options(False, auth)
+
+        assert is_async is False
+        assert normalized_auth == auth
 
 
 class TestBaseProxyStr:

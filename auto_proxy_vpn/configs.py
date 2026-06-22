@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from hashlib import sha256
 from logging import Logger
 from typing import ClassVar
 from dataclasses import dataclass
@@ -6,6 +7,11 @@ from os import environ
 from pathlib import Path
 
 from auto_proxy_vpn.cloud_provider import CloudProvider
+
+
+def _fingerprint(*values: str) -> str:
+    digest = sha256("\0".join(values).encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
 
 
 @dataclass
@@ -54,7 +60,7 @@ class DigitalOceanConfig(BaseConfig):
     token: str = ""
 
     def unique_key(self) -> tuple[CloudProvider, str]:
-        return (self.provider, self.token)
+        return (self.provider, _fingerprint(self.token))
 
 
 @dataclass
@@ -64,15 +70,14 @@ class GoogleConfig(BaseConfig):
     credentials: str = ""
 
     def unique_key(self) -> tuple[CloudProvider, str]:
+        credentials_path = (
+            self.credentials
+            if self.credentials
+            else environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+        )
         return (
             self.provider,
-            self.project
-            + ":"
-            + (
-                self.credentials
-                if self.credentials
-                else environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
-            ),
+            f"{self.project}:{_fingerprint(credentials_path)}",
         )
 
 
@@ -92,4 +97,4 @@ class AwsConfig(BaseConfig):
             if self.credentials
             else environ.get("AWS_SECRET_ACCESS_KEY", "")
         )
-        return (self.provider, f"{aws_access_key_id}:{aws_secret_access_key}")
+        return (self.provider, _fingerprint(aws_access_key_id, aws_secret_access_key))

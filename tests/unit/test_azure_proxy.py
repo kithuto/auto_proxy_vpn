@@ -370,8 +370,9 @@ class TestProxyManagerAzureInit:
             },
         ):
             with patch(
-                "auto_proxy_vpn.providers.azure.azure_proxy.basicConfig"
-            ) as basic_cfg:
+                "auto_proxy_vpn.providers.azure.azure_proxy.get_proxy_logger"
+            ) as mock_get_logger:
+                mock_get_logger.return_value = logger_proxy
                 with patch(
                     "auto_proxy_vpn.providers.azure.azure_proxy.getLogger",
                     side_effect=lambda name: (
@@ -393,7 +394,7 @@ class TestProxyManagerAzureInit:
                         log=True,
                     )
 
-        basic_cfg.assert_called_once()
+        mock_get_logger.assert_called_once()
         sdk["ClientSecretCredential"].assert_called_once()
         sdk["ResourceManagementClient"].assert_called_with(
             sdk["ClientSecretCredential"].return_value, "dict-sub-id"
@@ -615,7 +616,7 @@ class TestProxyManagerAzureGetProxy:
                 )
 
         assert proxy.user == "alice"
-        assert start_mock.call_args.args[5] == ["8.8.8.8", "1.2.3.4"]
+        assert start_mock.call_args.args[5] == ["8.8.8.8/32", "1.2.3.4/32"]
         assert mgr.logger.info.called
 
     def test_get_proxy_allowed_ips_string_is_accepted(self):
@@ -637,7 +638,7 @@ class TestProxyManagerAzureGetProxy:
                 )
 
         assert proxy.ip == "40.0.0.71"
-        assert start_mock.call_args.args[5] == ["8.8.8.8", "1.2.3.4"]
+        assert start_mock.call_args.args[5] == ["8.8.8.8/32", "1.2.3.4/32"]
 
     def test_get_proxy_retry_logs_warning(self):
         mgr, sdk = _build_azure_manager()
@@ -1011,7 +1012,7 @@ class TestProxyManagerAzureGetProxyByName:
         assert proxy.port == 3128
         assert proxy.user == "alice"
         assert proxy.password == "secret"
-        assert proxy.allowed_ips == ["1.1.1.1"]
+        assert proxy.allowed_ips == ["1.1.1.1/32"]
         assert proxy.destroy is False
 
     @pytest.mark.parametrize(

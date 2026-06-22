@@ -1,4 +1,4 @@
-from logging import INFO, Logger, basicConfig, getLogger
+from logging import Logger
 from os import environ
 from os.path import isfile
 from typing import Literal
@@ -8,13 +8,22 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from auto_proxy_vpn import CloudProvider, ProxyManagers, AwsConfig, ManagerRuntimeConfig
-from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
+from auto_proxy_vpn.utils.base_proxy import (
+    BaseProxy,
+    BaseProxyManager,
+    normalize_get_proxy_by_name_options,
+)
 from auto_proxy_vpn.utils.proxy_auth import (
     normalize_proxy_auth,
     resolve_reloaded_proxy_auth,
 )
 from auto_proxy_vpn.utils.ssh_client import SSHClient
-from auto_proxy_vpn.utils.util import is_ssh_key, get_public_ip, normalize_allowed_ips
+from auto_proxy_vpn.utils.util import (
+    get_proxy_logger,
+    get_public_ip,
+    is_ssh_key,
+    normalize_allowed_ips,
+)
 from .aws_utils import get_region_instances, start_proxy
 
 
@@ -297,16 +306,7 @@ class ProxyManagerAws(BaseProxyManager[AwsProxy]):
             )
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
-        self.logger = logger
-        if self.log and not logger:
-            basicConfig(
-                filename=log_file,
-                format=self.log_format,
-                filemode="a",
-                datefmt="%d-%b-%Y %H:%M:%S",
-                level=INFO,
-            )
-            self.logger = getLogger("proxy_logger")
+        self.logger = get_proxy_logger(log, log_file, self.log_format, logger)
 
         # check aws imports
         try:
@@ -483,7 +483,7 @@ class ProxyManagerAws(BaseProxyManager[AwsProxy]):
 
         auth = normalize_proxy_auth(auth)
 
-        ip = get_public_ip()
+        ip = normalize_allowed_ips(get_public_ip())[0]
 
         ips = normalize_allowed_ips(allowed_ips)
 
@@ -557,8 +557,8 @@ class ProxyManagerAws(BaseProxyManager[AwsProxy]):
     def get_proxy_by_name(
         self,
         name: str,
-        auth: dict[Literal["user", "password"], str] | None = None,
         is_async: bool = False,
+        auth: dict[Literal["user", "password"], str] | None = None,
         on_exit: Literal["destroy", "keep"] = "destroy",
     ) -> AwsProxy:
         """Reload an existing AWS proxy instance by its name.
@@ -594,6 +594,7 @@ class ProxyManagerAws(BaseProxyManager[AwsProxy]):
         ValueError
             If the proxy port cannot be extracted from the instance config.
         """
+        is_async, auth = normalize_get_proxy_by_name_options(is_async, auth)
 
         running_proxies = self.get_running_proxy_names(return_region=True)
         if name not in [x[0] for x in running_proxies]:

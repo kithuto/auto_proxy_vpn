@@ -1,5 +1,5 @@
 from typing import Literal
-from logging import Logger, basicConfig, INFO, getLogger
+from logging import Logger
 from os import environ
 from os.path import isfile
 from random import randint, shuffle, choice
@@ -14,12 +14,21 @@ from auto_proxy_vpn import (
     ManagerRuntimeConfig,
     GoogleConfig,
 )
-from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
+from auto_proxy_vpn.utils.base_proxy import (
+    BaseProxy,
+    BaseProxyManager,
+    normalize_get_proxy_by_name_options,
+)
 from auto_proxy_vpn.utils.proxy_auth import (
     normalize_proxy_auth,
     resolve_reloaded_proxy_auth,
 )
-from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key, normalize_allowed_ips
+from auto_proxy_vpn.utils.util import (
+    get_proxy_logger,
+    get_public_ip,
+    is_ssh_key,
+    normalize_allowed_ips,
+)
 from .google_exceptions import GoogleAuthException
 from .google_utils import (
     start_proxy,
@@ -155,7 +164,6 @@ class GoogleProxy(BaseProxy):
                         .access_configs[0]
                         .nat_i_p
                     )
-                    print(self.ip)
                 except Exception:
                     if not self.retried:
                         if self.logger:
@@ -276,8 +284,13 @@ class GoogleProxy(BaseProxy):
                 response = self.manager._firewall_client.delete(request=request)
                 if not self.is_async and wait:
                     _ = wait_for_extended_operation(response)
-            except Exception:
-                pass
+            except Exception as exc:
+                if self.logger:
+                    self.logger.warning(
+                        "Failed to delete Google firewall %s: %s",
+                        f"{self.name}-firewall",
+                        exc,
+                    )
 
             try:
                 request = self.manager._compute_v1.DeleteInstanceRequest(
@@ -286,8 +299,13 @@ class GoogleProxy(BaseProxy):
                 response = self.manager._instances_client.delete(request=request)
                 if not self.is_async and wait:
                     _ = wait_for_extended_operation(response)
-            except Exception:
-                pass
+            except Exception as exc:
+                if self.logger:
+                    self.logger.warning(
+                        "Failed to delete Google instance %s: %s",
+                        self.name,
+                        exc,
+                    )
 
             if self.logger:
                 self.logger.info(
@@ -431,16 +449,7 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             )
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
-        self.logger = logger
-        if self.log and not logger:
-            basicConfig(
-                filename=log_file,
-                format=self.log_format,
-                filemode="a",
-                datefmt="%d-%b-%Y %H:%M:%S",
-                level=INFO,
-            )
-            self.logger = getLogger("proxy_logger")
+        self.logger = get_proxy_logger(log, log_file, self.log_format, logger)
 
         try:
             from google.cloud import compute_v1
@@ -473,7 +482,6 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             "medium": "e2-highcpu-2",
             "large": "e2-highcpu-4",
         }
-        # self._instance_vpn_sizes: dict[Literal["small", "medium", "large"], str] = {"small": "e2-small", "medium": "e2-standard-2", "large": "e2-standard-4"}
 
         # get all available regions and zones
         self._regions, self._sizes_regions = get_avaliable_regions_by_size(
@@ -620,7 +628,7 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
 
         auth = normalize_proxy_auth(auth)
 
-        ip = get_public_ip()
+        ip = normalize_allowed_ips(get_public_ip())[0]
 
         ips = normalize_allowed_ips(allowed_ips)
 
@@ -691,6 +699,7 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
             region,
             zone,
             proxy_size,
+            allowed_ips=ips,
             is_async=is_async,
             user=auth.get("user", ""),
             password=auth.get("password", ""),
@@ -701,8 +710,8 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
     def get_proxy_by_name(
         self,
         name: str,
-        auth: dict[Literal["user", "password"], str] | None = None,
         is_async: bool = False,
+        auth: dict[Literal["user", "password"], str] | None = None,
         on_exit: Literal["destroy", "keep"] = "destroy",
     ) -> GoogleProxy:
         """Load an existing Google Cloud proxy instance by its name.
@@ -737,6 +746,7 @@ class ProxyManagerGoogle(BaseProxyManager[GoogleProxy]):
         ValueError
             If the startup script cannot be found in the instance metadata.
         """
+        is_async, auth = normalize_get_proxy_by_name_options(is_async, auth)
 
         instance_request = self._compute_v1.AggregatedListInstancesRequest(
             project=self.project, filter=f"name eq {name}"

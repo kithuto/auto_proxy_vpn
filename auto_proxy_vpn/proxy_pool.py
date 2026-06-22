@@ -1,5 +1,5 @@
 from random import shuffle
-from logging import INFO, Logger, basicConfig, getLogger
+from logging import Logger
 from typing import Literal
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -7,6 +7,7 @@ from auto_proxy_vpn.cloud_provider import CloudProvider
 from auto_proxy_vpn.configs import BaseConfig, ManagerRuntimeConfig
 from auto_proxy_vpn.manager_register import ProxyManagers
 from auto_proxy_vpn.utils.base_proxy import BaseProxyManager, BaseProxy, ProxyBatch
+from auto_proxy_vpn.utils.util import get_proxy_logger
 
 
 class RandomManagerPicker:
@@ -161,16 +162,7 @@ class ProxyPool:
         """
 
         # all the managers will always share the same logger
-        self.logger = logger
-        if log and not logger:
-            basicConfig(
-                filename=log_file,
-                format=log_format,
-                filemode="a",
-                datefmt="%d-%b-%Y %H:%M:%S",
-                level=INFO,
-            )
-            self.logger = getLogger("proxy_logger")
+        self.logger = get_proxy_logger(log, log_file, log_format, logger)
 
         for provider_config in provider_configs:
             manager_cls = ProxyManagers.get_manager(provider_config.provider)

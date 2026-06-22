@@ -10,6 +10,7 @@ from auto_proxy_vpn.configs import (
     DigitalOceanConfig,
     GoogleConfig,
     ManagerRuntimeConfig,
+    _fingerprint,
 )
 
 
@@ -43,7 +44,8 @@ class TestDigitalOceanConfig:
 
     def test_unique_key_uses_token(self, digitalocean_config):
         key = digitalocean_config.unique_key()
-        assert key == (CloudProvider.DIGITALOCEAN, "fake-do-token-1234")
+        assert key == (CloudProvider.DIGITALOCEAN, _fingerprint("fake-do-token-1234"))
+        assert "fake-do-token-1234" not in key[1]
 
     def test_different_tokens_produce_different_keys(self):
         c1 = DigitalOceanConfig(token="tok-a", ssh_key="a")
@@ -75,22 +77,29 @@ class TestGoogleConfig:
         key = google_config.unique_key()
         assert key == (
             CloudProvider.GOOGLE,
-            "test-gcp-project:/tmp/fake_credentials.json",
+            f"test-gcp-project:{_fingerprint('/tmp/fake_credentials.json')}",
         )
+        assert "/tmp/fake_credentials.json" not in key[1]
 
     def test_unique_key_falls_back_to_env_when_no_credentials(self):
         with patch.dict(environ, {"GOOGLE_APPLICATION_CREDENTIALS": "/env/path.json"}):
             cfg = GoogleConfig(
                 project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
             )
-            assert cfg.unique_key() == (CloudProvider.GOOGLE, "proj:/env/path.json")
+            assert cfg.unique_key() == (
+                CloudProvider.GOOGLE,
+                f"proj:{_fingerprint('/env/path.json')}",
+            )
 
     def test_unique_key_empty_when_no_credentials_and_no_env(self):
         with patch.dict(environ, {}, clear=True):
             cfg = GoogleConfig(
                 project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
             )
-            assert cfg.unique_key() == (CloudProvider.GOOGLE, "proj:")
+            assert cfg.unique_key() == (
+                CloudProvider.GOOGLE,
+                f"proj:{_fingerprint('')}",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +150,9 @@ class TestAwsConfig:
         key = aws_config.unique_key()
         assert key == (
             CloudProvider.AWS,
-            "fake-aws-access-key-id:fake-aws-secret-access-key",
+            _fingerprint("fake-aws-access-key-id", "fake-aws-secret-access-key"),
         )
+        assert "fake-aws-secret-access-key" not in key[1]
 
     def test_unique_key_falls_back_to_env(self):
         with patch.dict(
@@ -156,11 +166,14 @@ class TestAwsConfig:
             cfg = AwsConfig(
                 ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...", credentials=None
             )
-            assert cfg.unique_key() == (CloudProvider.AWS, "env-ak:env-sk")
+            assert cfg.unique_key() == (
+                CloudProvider.AWS,
+                _fingerprint("env-ak", "env-sk"),
+            )
 
     def test_unique_key_empty_when_no_credentials(self):
         with patch.dict(environ, {}, clear=True):
             cfg = AwsConfig(
                 ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...", credentials=None
             )
-            assert cfg.unique_key() == (CloudProvider.AWS, ":")
+            assert cfg.unique_key() == (CloudProvider.AWS, _fingerprint("", ""))

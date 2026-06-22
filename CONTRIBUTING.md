@@ -89,12 +89,9 @@ auto_proxy_vpn/
 │   ├── azure/               # Azure provider
 │   ├── digitalocean/        # DigitalOcean provider
 │   ├── google/              # Google Cloud provider
-│   ├── aws/                 # AWS provider
-│   ├── alibaba/             # (planned)
-│   └── oracle/              # (planned)
+│   └── aws/                 # AWS provider
 └── utils/
     ├── base_proxy.py        # BaseProxy, BaseProxyManager, ProxyBatch
-    ├── base_vpn.py          # Base VPN classes
     ├── exceptions.py        # Shared exceptions
     ├── files_utils.py       # Squid config generator
     ├── ssh_client.py        # SSH helpers

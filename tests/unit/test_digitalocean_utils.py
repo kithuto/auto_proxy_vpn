@@ -234,28 +234,6 @@ class TestGetServersAndSize:
         with pytest.raises(NameError, match="Not valid"):
             get_servers_and_size("huge", [], [])
 
-    def test_vpn_sizes_return_expected_slugs(self):
-        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import (
-            get_servers_and_size,
-        )
-
-        small_slug, small_servers = get_servers_and_size(
-            "small", [], ["nyc1", "sfo1"], vpn=True
-        )
-        medium_slug, medium_servers = get_servers_and_size(
-            "medium", [], ["nyc1", "sfo1"], vpn=True
-        )
-        large_slug, large_servers = get_servers_and_size(
-            "large", [], ["nyc1", "sfo1"], vpn=True
-        )
-
-        assert small_slug == "s-1vcpu-1gb"
-        assert medium_slug == "s-1vcpu-2gb"
-        assert large_slug == "s-2vcpu-4gb"
-        assert small_servers == ["nyc1", "sfo1"]
-        assert medium_servers == ["nyc1", "sfo1"]
-        assert large_servers == ["nyc1", "sfo1"]
-
 
 class TestGetNextProxyName:
     @responses.activate
@@ -318,36 +296,6 @@ class TestGetNextProxyName:
         with pytest.raises(NameError, match="already exists"):
             get_next_droplet_name(HEADERS, "taken")
 
-
-class TestGetNextVpnName:
-    @responses.activate
-    def test_first_vpn_name(self):
-        responses.add(
-            responses.GET,
-            f"{DO_API}/droplets",
-            json={"droplets": []},
-            status=200,
-        )
-        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import (
-            get_next_droplet_name,
-        )
-
-        assert get_next_droplet_name(HEADERS, is_vpn=True) == "vpn1"
-
-    @responses.activate
-    def test_increments_vpn_name(self):
-        responses.add(
-            responses.GET,
-            f"{DO_API}/droplets",
-            json={"droplets": [{"name": "vpn1"}, {"name": "vpn2"}]},
-            status=200,
-        )
-        from auto_proxy_vpn.providers.digitalocean.digitalocean_utils import (
-            get_next_droplet_name,
-        )
-
-        assert get_next_droplet_name(HEADERS, is_vpn=True) == "vpn3"
-
     def test_connection_error_raises(self, monkeypatch):
         from auto_proxy_vpn.providers.digitalocean import digitalocean_utils as utils
 
@@ -357,7 +305,7 @@ class TestGetNextVpnName:
         monkeypatch.setattr(utils, "get", _boom)
 
         with pytest.raises(ConnectionError, match="Error connecting to DigitalOcean"):
-            utils.get_next_droplet_name(HEADERS, is_vpn=True)
+            utils.get_next_droplet_name(HEADERS)
 
 
 class TestStartProxy:

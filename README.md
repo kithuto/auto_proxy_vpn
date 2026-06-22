@@ -5,7 +5,7 @@
 <p align="center">
   <h1 align="center">Auto proxy vpn</h1>
   <p align="center">
-    On-demand proxies and VPNs across multiple cloud providers — from a single Python call.
+    On-demand HTTP(S) proxies across multiple cloud providers — from a single Python call.
   </p>
 </p>
 
@@ -24,7 +24,7 @@
 
 ---
 
-**auto_proxy_vpn** is a Python library that provisions disposable HTTP(S) proxy servers (and WireGuard VPNs) on major cloud platforms. Each proxy runs [Squid](http://www.squid-cache.org/) on a fresh VM/droplet, is accessible in one or two minutes, and is cleaned up automatically when you're done.
+**auto_proxy_vpn** is a Python library that provisions disposable HTTP(S) proxy servers on major cloud platforms. Each proxy runs [Squid](http://www.squid-cache.org/) on a fresh VM/droplet, is accessible in one or two minutes, and is cleaned up automatically when you're done.
 
 **Key features:**
 
@@ -191,14 +191,12 @@ with pool.create_batch(6) as batch:
 
 ## Supported Providers
 
-| Provider | Proxy | VPN | Status |
-|---|---|---|---|
-| **Google Cloud** | Yes | - | Stable |
-| **Azure** | Yes | — | Stable |
-| **DigitalOcean** | Yes | - | Stable |
-| **AWS** | Yes | — | Stable |
-| Oracle Cloud | — | — | Planned |
-| Alibaba Cloud | — | — | Planned |
+| Provider | Proxy | Status |
+|---|---|---|
+| **Google Cloud** | Yes | Stable |
+| **Azure** | Yes | Stable |
+| **DigitalOcean** | Yes | Stable |
+| **AWS** | Yes | Stable |
 
 ---
 
@@ -577,14 +575,11 @@ auto_proxy_vpn/
 ├── proxy_pool.py            # ProxyPool, RandomManagerPicker
 ├── providers/
 │   ├── azure/               # Azure VM proxy provider
-│   ├── digitalocean/        # DigitalOcean droplet proxy + WireGuard VPN
-│   ├── google/              # Google Compute Engine proxy + WireGuard VPN
+│   ├── digitalocean/        # DigitalOcean droplet proxy provider
+│   ├── google/              # Google Compute Engine proxy provider
 │   ├── aws/                 # AWS EC2 proxy provider
-│   ├── alibaba/             # (planned)
-│   └── oracle/              # (planned)
 └── utils/
     ├── base_proxy.py        # BaseProxy, BaseProxyManager, ProxyBatch
-    ├── base_vpn.py          # Base VPN classes
     ├── exceptions.py        # Shared exceptions
     ├── files_utils.py       # Squid config generator
     ├── ssh_client.py        # SSH command execution and file download

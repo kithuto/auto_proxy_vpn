@@ -120,7 +120,7 @@ def get_or_create_ssh_keys(
 
 
 def get_servers_and_size(
-    server_size: str, active_servers: list[dict], servers: list[str], vpn: bool = False
+    server_size: str, active_servers: list[dict], servers: list[str]
 ) -> Tuple[str, list[str]]:
     """
     Get the server size slug and the list of servers that support it
@@ -130,32 +130,24 @@ def get_servers_and_size(
         raise NameError("Not valid server size")
 
     if server_size == "small":
-        if vpn:
-            return "s-1vcpu-1gb", servers
         return "s-1vcpu-512mb-10gb", [
             x["slug"] for x in active_servers if "s-1vcpu-512mb-10gb" in x["sizes"]
         ]
 
     elif server_size == "medium":
-        if vpn:
-            return "s-1vcpu-2gb", servers
         return "s-1vcpu-1gb", servers
 
     else:
-        if vpn:
-            return "s-2vcpu-4gb", servers
         return "s-1vcpu-2gb", servers
 
 
-def get_next_droplet_name(
-    headers: dict[str, str], name: str = "", is_vpn: bool = False
-) -> str:
+def get_next_droplet_name(headers: dict[str, str], name: str = "") -> str:
     """
-    Get next avaliable proxy or vpn name.
+    Get next avaliable proxy name.
     """
     try:
         droplets = get(
-            f"https://api.digitalocean.com/v2/droplets?tag_name={'proxy' if not is_vpn else 'vpn'}",
+            "https://api.digitalocean.com/v2/droplets?tag_name=proxy",
             headers=headers,
             timeout=DIGITALOCEAN_TIMEOUT,
         ).json()["droplets"]
@@ -164,20 +156,14 @@ def get_next_droplet_name(
 
     if name:
         if [x["name"] for x in droplets if x["name"] == name]:
-            raise NameError(f"{'VPN' if is_vpn else 'Proxy'} {name} already exists!")
+            raise NameError(f"Proxy {name} already exists!")
         return name
 
-    names = sorted(
-        [
-            x["name"]
-            for x in droplets
-            if search(rf"^{'vpn' if is_vpn else 'proxy'}\d+$", x["name"])
-        ]
-    )
+    names = sorted([x["name"] for x in droplets if search(r"^proxy\d+$", x["name"])])
     if names:
         last_name = names[-1]
-        return f"{'vpn' if is_vpn else 'proxy'}{str(int(last_name[3 if is_vpn else 5 :]) + 1)}"
-    return f"{'vpn' if is_vpn else 'proxy'}1"
+        return f"proxy{str(int(last_name[5:]) + 1)}"
+    return "proxy1"
 
 
 def start_proxy(

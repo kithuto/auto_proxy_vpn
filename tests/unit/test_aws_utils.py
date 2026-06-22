@@ -207,25 +207,50 @@ class TestStartProxy:
 
         client.delete_security_group.assert_called_once_with(GroupId="sg-1")
 
-    def test_ingress_uses_cidr32_for_plain_ips_and_keeps_cidr(self):
-        manager, client, _, _ = _setup_clients_for_start()
-        client.describe_images.return_value = {
-            "Images": [{"ImageId": "ami-1", "CreationDate": "2025-01-01"}]
-        }
-        client.create_security_group.return_value = {"GroupId": "sg-1"}
 
-        start_proxy(
-            manager,  # type: ignore
-            "proxy1",
-            3128,
-            "us-east-1",
-            "t3.micro",
-            ["1.2.3.4", "5.6.7.0/24"],
-            is_async=True,
-        )
+def test_ingress_uses_cidr32_for_plain_ips_and_keeps_cidr():
+    manager, client, _, _ = _setup_clients_for_start()
+    client.describe_images.return_value = {
+        "Images": [{"ImageId": "ami-1", "CreationDate": "2025-01-01"}]
+    }
+    client.create_security_group.return_value = {"GroupId": "sg-1"}
 
-        kwargs = client.authorize_security_group_ingress.call_args.kwargs
-        ip_ranges = kwargs["IpPermissions"][0]["IpRanges"]
-        cidrs = {entry["CidrIp"] for entry in ip_ranges}
-        assert "1.2.3.4/32" in cidrs
-        assert "5.6.7.0/24" in cidrs
+    start_proxy(
+        manager,  # type: ignore
+        "proxy1",
+        3128,
+        "us-east-1",
+        "t3.micro",
+        ["1.2.3.4", "5.6.7.0/24"],
+        is_async=True,
+    )
+
+    kwargs = client.authorize_security_group_ingress.call_args.kwargs
+    ip_ranges = kwargs["IpPermissions"][0]["IpRanges"]
+    cidrs = {entry["CidrIp"] for entry in ip_ranges}
+    assert "1.2.3.4/32" in cidrs
+    assert "5.6.7.0/24" in cidrs
+
+
+def test_ingress_splits_ipv4_and_ipv6_ranges():
+    manager, client, _, _ = _setup_clients_for_start()
+    client.describe_images.return_value = {
+        "Images": [{"ImageId": "ami-1", "CreationDate": "2025-01-01"}]
+    }
+    client.create_security_group.return_value = {"GroupId": "sg-1"}
+
+    start_proxy(
+        manager,  # type: ignore
+        "proxy1",
+        3128,
+        "us-east-1",
+        "t3.micro",
+        ["1.2.3.4", "2001:db8::1"],
+        is_async=True,
+    )
+
+    permission = client.authorize_security_group_ingress.call_args.kwargs[
+        "IpPermissions"
+    ][0]
+    assert permission["IpRanges"] == [{"CidrIp": "1.2.3.4/32"}]
+    assert permission["Ipv6Ranges"] == [{"CidrIpv6": "2001:db8::1/128"}]

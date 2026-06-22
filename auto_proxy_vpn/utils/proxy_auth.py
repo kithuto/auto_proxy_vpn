@@ -34,6 +34,13 @@ class ProxyAuthMetadata:
     password_hash: str
 
 
+@dataclass(frozen=True)
+class ParsedPasswordHash:
+    iterations: int
+    salt: bytes
+    digest: bytes
+
+
 def _b64_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
@@ -41,6 +48,27 @@ def _b64_encode(data: bytes) -> str:
 def _b64_decode(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
     return base64.urlsafe_b64decode(value + padding)
+
+
+def _parse_password_hash(password_hash: str) -> ParsedPasswordHash:
+    version, algorithm, iterations, salt, digest = password_hash.split("$", 4)
+    if version != PASSWORD_HASH_VERSION or algorithm != PBKDF2_ALGORITHM:
+        raise ValueError("unsupported password hash format")
+
+    iteration_count = int(iterations)
+    if iteration_count <= 0 or iteration_count > PBKDF2_ITERATIONS:
+        raise ValueError("unsupported password hash iterations")
+
+    salt_bytes = _b64_decode(salt)
+    expected_digest = _b64_decode(digest)
+    if len(salt_bytes) != SALT_BYTES or len(expected_digest) != DIGEST_BYTES:
+        raise ValueError("invalid password hash size")
+
+    return ParsedPasswordHash(
+        iterations=iteration_count,
+        salt=salt_bytes,
+        digest=expected_digest,
+    )
 
 
 def hash_proxy_password(
@@ -71,23 +99,18 @@ def hash_proxy_password(
 
 def verify_proxy_password(password: str, password_hash: str) -> bool:
     try:
-        version, algorithm, iterations, salt, digest = password_hash.split("$", 4)
-        if version != PASSWORD_HASH_VERSION or algorithm != PBKDF2_ALGORITHM:
-            return False
-        iteration_count = int(iterations)
-        salt_bytes = _b64_decode(salt)
-        expected_digest = _b64_decode(digest)
+        parsed_hash = _parse_password_hash(password_hash)
     except (TypeError, ValueError, binascii.Error):
         return False
 
     actual_digest = hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
-        salt_bytes,
-        iteration_count,
-        dklen=len(expected_digest),
+        parsed_hash.salt,
+        parsed_hash.iterations,
+        dklen=len(parsed_hash.digest),
     )
-    return hmac.compare_digest(actual_digest, expected_digest)
+    return hmac.compare_digest(actual_digest, parsed_hash.digest)
 
 
 def normalize_proxy_auth(auth: Mapping[str, str] | None) -> AuthDict:
@@ -136,8 +159,14 @@ def parse_proxy_auth_metadata(proxy_config: str) -> ProxyAuthMetadata | None:
         password_hash = payload["password_hash"]
         if not isinstance(user, str) or not isinstance(password_hash, str):
             raise ValueError
-        password_hash.split("$", 4)
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        _parse_password_hash(password_hash)
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        binascii.Error,
+        json.JSONDecodeError,
+    ) as exc:
         raise ProxyAuthenticationError(
             "Proxy authentication metadata is invalid."
         ) from exc

@@ -224,8 +224,10 @@ class TestProxyManagerAwsInit:
             },
         ):
             with patch(
-                "auto_proxy_vpn.providers.aws.aws_proxy.basicConfig"
-            ) as mock_basic:
+                "auto_proxy_vpn.providers.aws.aws_proxy.get_proxy_logger"
+            ) as mock_get_logger:
+                mock_logger = MagicMock()
+                mock_get_logger.return_value = mock_logger
                 from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
 
                 mgr = ProxyManagerAws(
@@ -237,8 +239,8 @@ class TestProxyManagerAwsInit:
                     log=True,
                 )
 
-        assert mgr.logger is not None
-        mock_basic.assert_called_once()
+        assert mgr.logger is mock_logger
+        mock_get_logger.assert_called_once()
 
     def test_from_config_with_none_raises(self):
         from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
@@ -376,7 +378,7 @@ class TestProxyManagerAwsGetProxy:
                     )
 
         assert proxy.ip == "54.0.0.3"
-        assert start_mock.call_args.args[5] == ["8.8.8.8", "1.2.3.4"]
+        assert start_mock.call_args.args[5] == ["8.8.8.8/32", "1.2.3.4/32"]
 
     def test_get_proxy_logs_info_warning_and_error(self):
         mgr, _ = _build_aws_manager()

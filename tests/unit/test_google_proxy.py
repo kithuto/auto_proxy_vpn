@@ -329,8 +329,10 @@ class TestProxyManagerGoogleInit:
 
         with patch.dict("sys.modules", modules):
             with patch(
-                "auto_proxy_vpn.providers.google.google_proxy.basicConfig"
-            ) as mock_basic:
+                "auto_proxy_vpn.providers.google.google_proxy.get_proxy_logger"
+            ) as mock_get_logger:
+                mock_logger = MagicMock()
+                mock_get_logger.return_value = mock_logger
                 from auto_proxy_vpn.providers.google.google_proxy import (
                     ProxyManagerGoogle,
                 )
@@ -342,8 +344,8 @@ class TestProxyManagerGoogleInit:
                     log=True,
                 )
 
-        assert mgr.logger is not None
-        mock_basic.assert_called_once()
+        assert mgr.logger is mock_logger
+        mock_get_logger.assert_called_once()
 
 
 # ============================================================================
@@ -481,7 +483,7 @@ class TestProxyManagerGoogleGetProxy:
                     return_value=True,
                 ):
                     proxy = mgr.get_proxy(size="small", is_async=True)
-        print(proxy.ip)
+
         assert proxy.ip == "35.0.0.99"
 
     def test_get_proxy_auto_name_skips_existing_names(self):
@@ -562,8 +564,8 @@ class TestProxyManagerGoogleGetProxy:
                     mgr.get_proxy(size="small", allowed_ips="5.5.5.5", is_async=True)
 
         passed_allowed_ips = mock_start.call_args.args[7]
-        assert "5.5.5.5" in passed_allowed_ips
-        assert "35.0.0.9" in passed_allowed_ips
+        assert "5.5.5.5/32" in passed_allowed_ips
+        assert "35.0.0.9/32" in passed_allowed_ips
 
     def test_get_proxy_logs_warning_and_error(self):
         mgr, clients = _build_google_manager()
@@ -1286,7 +1288,7 @@ class TestProxyManagerGoogleGetProxyByName:
         assert proxy.port == 3128
         assert proxy.user == "alice"
         assert proxy.password == "secret"
-        assert proxy.allowed_ips == ["10.0.0.1", "10.0.0.2"]
+        assert proxy.allowed_ips == ["10.0.0.1/32", "10.0.0.2/32"]
         assert proxy.destroy is False
 
     @pytest.mark.parametrize(

@@ -2,7 +2,7 @@ from typing import Literal
 from requests import get, delete
 from random import choice, randint, shuffle
 from time import sleep
-import logging
+from logging import Logger
 from re import search
 from os import environ
 from os.path import isfile
@@ -14,7 +14,11 @@ from auto_proxy_vpn import (
     ManagerRuntimeConfig,
     DigitalOceanConfig,
 )
-from auto_proxy_vpn.utils.base_proxy import BaseProxy, BaseProxyManager
+from auto_proxy_vpn.utils.base_proxy import (
+    BaseProxy,
+    BaseProxyManager,
+    normalize_get_proxy_by_name_options,
+)
 from auto_proxy_vpn.utils.proxy_auth import (
     normalize_proxy_auth,
     resolve_reloaded_proxy_auth,
@@ -27,7 +31,12 @@ from .digitalocean_utils import (
 )
 from .digitalocean_exceptions import DropletNotProxyException
 from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
-from auto_proxy_vpn.utils.util import get_public_ip, is_ssh_key, normalize_allowed_ips
+from auto_proxy_vpn.utils.util import (
+    get_proxy_logger,
+    get_public_ip,
+    is_ssh_key,
+    normalize_allowed_ips,
+)
 from auto_proxy_vpn.utils.ssh_client import SSHClient
 
 DIGITALOCEAN_TIMEOUT = 15
@@ -92,7 +101,7 @@ class DigitalOceanProxy(BaseProxy):
         is_async: bool = False,
         user: str = "",
         password: str = "",
-        logger: logging.Logger | None = None,
+        logger: Logger | None = None,
         reload: bool = False,
         on_exit: Literal["keep", "destroy"] = "destroy",
     ):
@@ -187,11 +196,18 @@ class DigitalOceanProxy(BaseProxy):
         if self.stopped or not self.destroy:
             return
 
-        response = delete(
-            "https://api.digitalocean.com/v2/droplets/" + str(self.id),
-            headers=self._headers,
-            timeout=DIGITALOCEAN_TIMEOUT,
-        )
+        try:
+            response = delete(
+                "https://api.digitalocean.com/v2/droplets/" + str(self.id),
+                headers=self._headers,
+                timeout=DIGITALOCEAN_TIMEOUT,
+            )
+        except Exception as exc:
+            if self.logger:
+                self.logger.warning(
+                    "Failed to delete DigitalOcean droplet %s: %s", self.id, exc
+                )
+            return
         if self.logger:
             self.logger.info(
                 f"DigitalOcean proxy{' ' + self.get_proxy_str(redact_auth=True) if self.get_proxy_str() else ''}{' already' if response.status_code > 300 else ''} removed."
@@ -244,7 +260,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
     log_format : str, optional
         Format string used by ``logging`` when an internal logger is created.
         Defaults to ``'%(asctime)-10s %(levelname)-5s %(message)s'``.
-    logger : logging.Logger or None, optional
+    logger : Logger or None, optional
         Custom logger instance. When provided, ``log_file`` and ``log_format``
         are ignored. Defaults to ``None``.
 
@@ -294,7 +310,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         log: bool = True,
         log_file: str | None = None,
         log_format: str = "%(asctime)-10s %(levelname)-5s %(message)s",
-        logger: logging.Logger | None = None,
+        logger: Logger | None = None,
     ):
         if isinstance(ssh_key, Path):
             ssh_key = str(ssh_key)
@@ -324,16 +340,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         self.proxy_image = "ubuntu-24-04-x64"
         self.log = True if log or log_file or logger else False
         self.log_format = log_format
-        self.logger = logger
-        if self.log and not logger:
-            logging.basicConfig(
-                filename=log_file,
-                format=self.log_format,
-                filemode="a",
-                datefmt="%d-%b-%Y %H:%M:%S",
-                level=logging.INFO,
-            )
-            self.logger = logging.getLogger("proxy_logger")
+        self.logger = get_proxy_logger(log, log_file, self.log_format, logger)
         self._token = token if token else environ.get("DIGITALOCEAN_API_TOKEN", "")
         if not self._token:
             raise ValueError(
@@ -474,8 +481,12 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         allowed_ips = normalize_allowed_ips(allowed_ips)
         if not allowed_ips:
             try:
-                allowed_ips = [get_public_ip()]
-            except Exception:
+                allowed_ips = normalize_allowed_ips(get_public_ip())
+            except Exception as exc:
+                if not auth:
+                    raise ConnectionError(
+                        "Can't determine the public IP for proxy access."
+                    ) from exc
                 allowed_ips = []
 
         if self.logger:
@@ -523,8 +534,8 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
     def get_proxy_by_name(
         self,
         name: str,
-        auth: dict[Literal["user", "password"], str] | None = None,
         is_async: bool = False,
+        auth: dict[Literal["user", "password"], str] | None = None,
         on_exit: Literal["destroy", "keep"] = "destroy",
     ) -> DigitalOceanProxy:
         """Gets a proxy instance by droplet name.
@@ -558,6 +569,7 @@ class ProxyManagerDigitalOcean(BaseProxyManager[DigitalOceanProxy]):
         ValueError
             Port or auth credentials not found in the Squid config.
         """
+        is_async, auth = normalize_get_proxy_by_name_options(is_async, auth)
 
         try:
             droplets = get(

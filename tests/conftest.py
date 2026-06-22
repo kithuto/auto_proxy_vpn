@@ -107,7 +107,7 @@ class StubProxyManager(BaseProxyManager[StubProxy]):
         self._get_proxy_calls.append(call)
         return StubProxy(name=f"{self.label}-proxy-{len(self._get_proxy_calls)}")
 
-    def get_proxy_by_name(self, name, auth=None, is_async=False, on_exit="destroy"):
+    def get_proxy_by_name(self, name, is_async=False, auth=None, on_exit="destroy"):
         return StubProxy(name=name)
 
     def get_running_proxy_names(self):

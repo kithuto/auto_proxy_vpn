@@ -1,10 +1,34 @@
 from typing import TYPE_CHECKING
+from ipaddress import ip_network
 
 from auto_proxy_vpn.utils.files_utils import get_squid_file
+from auto_proxy_vpn.utils.util import normalize_allowed_ips
 from .aws_exceptions import AwsUnauthorizedOperationError
 
 if TYPE_CHECKING:
     from .aws_proxy import ProxyManagerAws
+
+
+def _ip_permission(port: int, allowed_ips: list[str]) -> dict:
+    ipv4_ranges = []
+    ipv6_ranges = []
+    for allowed_ip in allowed_ips:
+        cidr = ip_network(allowed_ip, strict=False)
+        if cidr.version == 4:
+            ipv4_ranges.append({"CidrIp": str(cidr)})
+        else:
+            ipv6_ranges.append({"CidrIpv6": str(cidr)})
+
+    permission = {
+        "IpProtocol": "tcp",
+        "FromPort": port,
+        "ToPort": port,
+    }
+    if ipv4_ranges:
+        permission["IpRanges"] = ipv4_ranges
+    if ipv6_ranges:
+        permission["Ipv6Ranges"] = ipv6_ranges
+    return permission
 
 
 def get_region_instances(
@@ -146,26 +170,14 @@ def start_proxy(
     )
     security_group_id = response["GroupId"]
 
+    allowed_ips = normalize_allowed_ips(allowed_ips)
+
     # allow ssh and proxy port
     client.authorize_security_group_ingress(
         GroupId=security_group_id,
         IpPermissions=[
-            {
-                "IpProtocol": "tcp",
-                "FromPort": 22,
-                "ToPort": 22,
-                "IpRanges": [
-                    {"CidrIp": f"{x}/32" if "/" not in x else x} for x in allowed_ips
-                ],
-            },
-            {
-                "IpProtocol": "tcp",
-                "FromPort": port,
-                "ToPort": port,
-                "IpRanges": [
-                    {"CidrIp": f"{x}/32" if "/" not in x else x} for x in allowed_ips
-                ],
-            },
+            _ip_permission(22, allowed_ips),
+            _ip_permission(port, allowed_ips),
         ],
     )
 
@@ -187,7 +199,11 @@ def start_proxy(
                 }
             ],
             UserData=get_squid_file(
-                port, allowed_ips=allowed_ips, ssh_keys=proxy_manager.ssh_keys
+                port,
+                user=user,
+                password=password,
+                allowed_ips=allowed_ips,
+                ssh_keys=proxy_manager.ssh_keys,
             ),
         )
     except proxy_manager._aws_ClientError as e:
