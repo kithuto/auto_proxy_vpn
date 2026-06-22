@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from auto_proxy_vpn.utils.ssh_client import SSHClient
+from auto_proxy_vpn.utils.ssh_client import SCP_EXECUTABLE, SSHClient
 
 
 class TestSSHClient:
@@ -63,7 +63,9 @@ class TestSSHClient:
 
     def test_download_file_raises_connection_error_on_stderr(self):
         client = SSHClient("1.2.3.4", "root")
-        with patch.object(client, "run_command", return_value=(1, "", "permission denied")):
+        with patch.object(
+            client, "run_command", return_value=(1, "", "permission denied")
+        ):
             with pytest.raises(ConnectionError, match="Can't connect"):
                 client.download_file("/tmp/a.txt", "./a.txt")
 
@@ -71,10 +73,11 @@ class TestSSHClient:
         client = SSHClient("1.2.3.4", "root")
         with patch.object(client, "run_command", return_value=(0, "", "")):
             with patch("auto_proxy_vpn.utils.ssh_client.run") as mock_run:
+                mock_run.return_value = SimpleNamespace(returncode=0)
                 client.download_file("/tmp/a.txt", "./a.txt")
 
         mock_run.assert_called_once_with(
-            "scp root@1.2.3.4:/tmp/a.txt ./a.txt",
-            shell=True,
+            [SCP_EXECUTABLE, "root@1.2.3.4:/tmp/a.txt", "./a.txt"],
             capture_output=True,
+            timeout=30,
         )

@@ -1,3 +1,2 @@
 class GoogleAuthException(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    """Raised when Google Cloud credentials are missing or invalid."""

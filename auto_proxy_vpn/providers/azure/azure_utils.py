@@ -6,7 +6,10 @@ from auto_proxy_vpn.utils.files_utils import get_squid_file
 if TYPE_CHECKING:
     from .azure_proxy import ProxyManagerAzure
 
-def get_last_avaliable_sku_version(compute_client, publisher: str, offer: str, sku: str, location: str) -> str:
+
+def get_last_avaliable_sku_version(
+    compute_client, publisher: str, offer: str, sku: str, location: str
+) -> str:
     """Return the latest available VM image version for a given Azure image SKU.
 
     Parameters
@@ -33,11 +36,24 @@ def get_last_avaliable_sku_version(compute_client, publisher: str, offer: str, s
     Exception
         Propagates errors raised by the Azure SDK request.
     """
-    versions = compute_client.virtual_machine_images.list(location, publisher, offer, sku)
+    versions = compute_client.virtual_machine_images.list(
+        location, publisher, offer, sku
+    )
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
     return versions[0].name
 
-def start_proxy(manager: "ProxyManagerAzure", proxy_name: str, port: int, region: str, machine_type: str, allowed_ips: list[str], user: str = '', password: str = '', is_async: bool = False) -> tuple[str, bool]:
+
+def start_proxy(
+    manager: "ProxyManagerAzure",
+    proxy_name: str,
+    port: int,
+    region: str,
+    machine_type: str,
+    allowed_ips: list[str],
+    user: str = "",
+    password: str = "",
+    is_async: bool = False,
+) -> tuple[str, bool]:
     """Create and start an Azure VM configured as an HTTP proxy.
 
     This helper provisions all required Azure resources for a proxy VM,
@@ -86,7 +102,7 @@ def start_proxy(manager: "ProxyManagerAzure", proxy_name: str, port: int, region
         Propagates exceptions raised by Azure SDK operations during resource
         creation and VM provisioning.
     """
-    
+
     firewall_name = f"{proxy_name}-firewall"
     vnet_name = f"{proxy_name}-vnet"
     subnet_name = f"{proxy_name}-subnet"
@@ -95,16 +111,27 @@ def start_proxy(manager: "ProxyManagerAzure", proxy_name: str, port: int, region
     network_interface_name = f"{proxy_name}-nic"
     os_disk_name = f"{proxy_name}-os"
     username = "proxy-user"
-    
+
     # ssh keys
-    ssh_keys = [manager._compute_models.SshPublicKey(path=f"/home/{username}/.ssh/authorized_keys", key_data=key) for key in manager.ssh_keys]
-    
+    ssh_keys = [
+        manager._compute_models.SshPublicKey(
+            path=f"/home/{username}/.ssh/authorized_keys", key_data=key
+        )
+        for key in manager.ssh_keys
+    ]
+
     # cloud init custom data
-    custom_data = b64encode(get_squid_file(port, user=user, password=password, allowed_ips=allowed_ips).encode('utf-8')).decode('latin-1')
-    
+    custom_data = b64encode(
+        get_squid_file(
+            port, user=user, password=password, allowed_ips=allowed_ips
+        ).encode("utf-8")
+    ).decode("latin-1")
+
     # creating resource group
-    _ = manager._resource_client.resource_groups.create_or_update(proxy_name, {'location': region, 'tags': {'type': 'proxy'}}) # type: ignore
-    
+    _ = manager._resource_client.resource_groups.create_or_update(
+        proxy_name, {"location": region, "tags": {"type": "proxy"}}
+    )  # type: ignore
+
     # firewall rules
     # allow only trafic from the desired ips to the ssh and proxy ports
     security_rules = [
@@ -117,7 +144,7 @@ def start_proxy(manager: "ProxyManagerAzure", proxy_name: str, port: int, region
             source_address_prefix=",".join(allowed_ips),
             source_port_range="*",
             destination_address_prefix="*",
-            destination_port_range="22"
+            destination_port_range="22",
         ),
         manager._network_models.SecurityRule(
             name="allowProxyTrafic",
@@ -128,17 +155,18 @@ def start_proxy(manager: "ProxyManagerAzure", proxy_name: str, port: int, region
             source_address_prefix=",".join(allowed_ips),
             source_port_range="*",
             destination_address_prefix="*",
-            destination_port_range=str(port)
-        )
+            destination_port_range=str(port),
+        ),
     ]
-    
+
     # create network security group
-    network_security_group_creation = manager._network_client.network_security_groups.begin_create_or_update(
-        proxy_name,
-        firewall_name,
-        manager._network_models.NetworkSecurityGroup(
-            location=region,
-            security_rules=security_rules
+    network_security_group_creation = (
+        manager._network_client.network_security_groups.begin_create_or_update(
+            proxy_name,
+            firewall_name,
+            manager._network_models.NetworkSecurityGroup(
+                location=region, security_rules=security_rules
+            ),
         )
     )
     # virtual net and subnet creation
@@ -147,98 +175,134 @@ def start_proxy(manager: "ProxyManagerAzure", proxy_name: str, port: int, region
         vnet_name,
         manager._network_models.VirtualNetwork(
             location=region,
-            address_space=manager._network_models.AddressSpace(address_prefixes=['10.0.0.0/16']),
-            subnets=[manager._network_models.Subnet(name=subnet_name, address_prefix='10.0.0.0/24')]
-        )
+            address_space=manager._network_models.AddressSpace(
+                address_prefixes=["10.0.0.0/16"]
+            ),
+            subnets=[
+                manager._network_models.Subnet(
+                    name=subnet_name, address_prefix="10.0.0.0/24"
+                )
+            ],
+        ),
     )
     # public ip creation
-    public_ip_creation = manager._network_client.public_ip_addresses.begin_create_or_update(
-        proxy_name,
-        public_ip_name,
-        manager._network_models.PublicIPAddress(
-            location=region,
-            public_ip_allocation_method="Static",
-            sku=manager._network_models.PublicIPAddressSku(name="Standard"),
-            public_ip_address_version="IPv4",
-            zones=None
+    public_ip_creation = (
+        manager._network_client.public_ip_addresses.begin_create_or_update(
+            proxy_name,
+            public_ip_name,
+            manager._network_models.PublicIPAddress(
+                location=region,
+                public_ip_allocation_method="Static",
+                sku=manager._network_models.PublicIPAddressSku(name="Standard"),
+                public_ip_address_version="IPv4",
+                zones=None,
+            ),
         )
     )
-    
+
     # wait for all items to be created
     network_security_group = network_security_group_creation.result()
-    subnet_id = vnet_creation.result().subnets[0].id # type: ignore
+    subnet_id = vnet_creation.result().subnets[0].id  # type: ignore
     public_ip = public_ip_creation.result()
-    
+
     if not public_ip.ip_address:
-        return '', True
-    
-    network_interface_creation = manager._network_client.network_interfaces.begin_create_or_update(
-        proxy_name,
-        network_interface_name,
-        manager._network_models.NetworkInterface(
-            location=region,
-            network_security_group=manager._network_models.NetworkSecurityGroup(id=network_security_group.id),
-            ip_configurations=[manager._network_models.NetworkInterfaceIPConfiguration(
-                name=ip_config_name,
-                subnet=manager._network_models.Subnet(id=subnet_id),
-                private_ip_allocation_method="Dynamic",
-                public_ip_address=manager._network_models.PublicIPAddress(id=public_ip.id, delete_option='Delete')
-            )]
+        return "", True
+
+    network_interface_creation = (
+        manager._network_client.network_interfaces.begin_create_or_update(
+            proxy_name,
+            network_interface_name,
+            manager._network_models.NetworkInterface(
+                location=region,
+                network_security_group=manager._network_models.NetworkSecurityGroup(
+                    id=network_security_group.id
+                ),
+                ip_configurations=[
+                    manager._network_models.NetworkInterfaceIPConfiguration(
+                        name=ip_config_name,
+                        subnet=manager._network_models.Subnet(id=subnet_id),
+                        private_ip_allocation_method="Dynamic",
+                        public_ip_address=manager._network_models.PublicIPAddress(
+                            id=public_ip.id, delete_option="Delete"
+                        ),
+                    )
+                ],
+            ),
         )
     )
     network_interface = network_interface_creation.result()
-    
+
     # delete NetworkWatcherRG (only if exists) to avoid aditional billing. No need to wait for it to finish
     try:
-        _ = manager._resource_client.resource_groups.begin_delete('NetworkWatcherRG')
-    except:
-        pass
-    
-    image_version = get_last_avaliable_sku_version(manager._compute_client, manager._image_publisher, manager._image_offer, manager._image_sku, region)
-    
+        _ = manager._resource_client.resource_groups.begin_delete("NetworkWatcherRG")
+    except Exception as exc:
+        if manager.logger:
+            manager.logger.warning("Failed to delete NetworkWatcherRG: %s", exc)
+
+    image_version = get_last_avaliable_sku_version(
+        manager._compute_client,
+        manager._image_publisher,
+        manager._image_offer,
+        manager._image_sku,
+        region,
+    )
+
     # create the virtual machine
     vm_disk = manager._compute_models.OSDisk(
         name=os_disk_name,
         create_option="fromImage",
-        managed_disk=manager._compute_models.ManagedDiskParameters(storage_account_type="Standard_LRS"),
-        delete_option="Delete"
+        managed_disk=manager._compute_models.ManagedDiskParameters(
+            storage_account_type="Standard_LRS"
+        ),
+        delete_option="Delete",
     )
     vm_os_image = manager._compute_models.ImageReference(
         publisher=manager._image_publisher,
         offer=manager._image_offer,
         sku=manager._image_sku,
-        version=image_version
+        version=image_version,
     )
     vm_os_profile = manager._compute_models.OSProfile(
         computer_name=proxy_name,
         admin_username=username,
         linux_configuration=manager._compute_models.LinuxConfiguration(
             disable_password_authentication=True,
-            ssh=manager._compute_models.SshConfiguration(public_keys=ssh_keys)
+            ssh=manager._compute_models.SshConfiguration(public_keys=ssh_keys),
         ),
-        custom_data=custom_data
+        custom_data=custom_data,
     )
     proxy_vm = manager._compute_models.VirtualMachine(
         location=region,
         hardware_profile=manager._compute_models.HardwareProfile(vm_size=machine_type),
         storage_profile=manager._compute_models.StorageProfile(
-            os_disk=vm_disk,
-            image_reference=vm_os_image
+            os_disk=vm_disk, image_reference=vm_os_image
         ),
         network_profile=manager._compute_models.NetworkProfile(
-            network_interfaces=[manager._compute_models.NetworkInterfaceReference(id=network_interface.id, delete_option="Delete")]
+            network_interfaces=[
+                manager._compute_models.NetworkInterfaceReference(
+                    id=network_interface.id, delete_option="Delete"
+                )
+            ]
         ),
         security_profile=manager._compute_models.SecurityProfile(
             security_type="TrustedLaunch",
-            uefi_settings=manager._compute_models.UefiSettings(secure_boot_enabled=True, v_tpm_enabled=True)
+            uefi_settings=manager._compute_models.UefiSettings(
+                secure_boot_enabled=True, v_tpm_enabled=True
+            ),
         ),
-        additional_capabilities=manager._compute_models.AdditionalCapabilities(hibernation_enabled=False),
+        additional_capabilities=manager._compute_models.AdditionalCapabilities(
+            hibernation_enabled=False
+        ),
         os_profile=vm_os_profile,
-        zones=None
+        zones=None,
     )
-    
-    virtual_machine_creation = manager._compute_client.virtual_machines.begin_create_or_update(proxy_name, proxy_name, proxy_vm) # type: ignore
+
+    virtual_machine_creation = (
+        manager._compute_client.virtual_machines.begin_create_or_update(
+            proxy_name, proxy_name, proxy_vm
+        )
+    )  # type: ignore
     if not is_async:
         _ = virtual_machine_creation.result()
-    
-    return public_ip.ip_address if public_ip.ip_address else '', False
+
+    return public_ip.ip_address if public_ip.ip_address else "", False

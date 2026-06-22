@@ -1,6 +1,5 @@
 """Tests for configuration dataclasses and their validation logic."""
 
-import pytest
 from os import environ
 from unittest.mock import patch
 
@@ -11,12 +10,14 @@ from auto_proxy_vpn.configs import (
     DigitalOceanConfig,
     GoogleConfig,
     ManagerRuntimeConfig,
+    _fingerprint,
 )
 
 
 # ---------------------------------------------------------------------------
 # ManagerRuntimeConfig
 # ---------------------------------------------------------------------------
+
 
 class TestManagerRuntimeConfig:
     def test_defaults(self):
@@ -36,13 +37,15 @@ class TestManagerRuntimeConfig:
 # DigitalOceanConfig
 # ---------------------------------------------------------------------------
 
+
 class TestDigitalOceanConfig:
     def test_provider_is_digitalocean(self, digitalocean_config):
         assert digitalocean_config.provider == CloudProvider.DIGITALOCEAN
 
     def test_unique_key_uses_token(self, digitalocean_config):
         key = digitalocean_config.unique_key()
-        assert key == (CloudProvider.DIGITALOCEAN, "fake-do-token-1234")
+        assert key == (CloudProvider.DIGITALOCEAN, _fingerprint("fake-do-token-1234"))
+        assert "fake-do-token-1234" not in key[1]
 
     def test_different_tokens_produce_different_keys(self):
         c1 = DigitalOceanConfig(token="tok-a", ssh_key="a")
@@ -65,28 +68,44 @@ class TestDigitalOceanConfig:
 # GoogleConfig
 # ---------------------------------------------------------------------------
 
+
 class TestGoogleConfig:
     def test_provider_is_google(self, google_config):
         assert google_config.provider == CloudProvider.GOOGLE
 
     def test_unique_key_uses_credentials(self, google_config):
         key = google_config.unique_key()
-        assert key == (CloudProvider.GOOGLE, "test-gcp-project:/tmp/fake_credentials.json")
+        assert key == (
+            CloudProvider.GOOGLE,
+            f"test-gcp-project:{_fingerprint('/tmp/fake_credentials.json')}",
+        )
+        assert "/tmp/fake_credentials.json" not in key[1]
 
     def test_unique_key_falls_back_to_env_when_no_credentials(self):
         with patch.dict(environ, {"GOOGLE_APPLICATION_CREDENTIALS": "/env/path.json"}):
-            cfg = GoogleConfig(project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
-            assert cfg.unique_key() == (CloudProvider.GOOGLE, "proj:/env/path.json")
+            cfg = GoogleConfig(
+                project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+            )
+            assert cfg.unique_key() == (
+                CloudProvider.GOOGLE,
+                f"proj:{_fingerprint('/env/path.json')}",
+            )
 
     def test_unique_key_empty_when_no_credentials_and_no_env(self):
         with patch.dict(environ, {}, clear=True):
-            cfg = GoogleConfig(project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
-            assert cfg.unique_key() == (CloudProvider.GOOGLE, "proj:")
+            cfg = GoogleConfig(
+                project="proj", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+            )
+            assert cfg.unique_key() == (
+                CloudProvider.GOOGLE,
+                f"proj:{_fingerprint('')}",
+            )
 
 
 # ---------------------------------------------------------------------------
 # AzureConfig
 # ---------------------------------------------------------------------------
+
 
 class TestAzureConfig:
     def test_provider_is_azure(self, azure_config):
@@ -97,17 +116,24 @@ class TestAzureConfig:
         assert key == (CloudProvider.AZURE, "fake-subscription-id")
 
     def test_unique_key_with_dict_credentials(self):
-        cfg = AzureConfig(credentials={"AZURE_SUBSCRIPTION_ID": "sub-123"}, ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
+        cfg = AzureConfig(
+            credentials={"AZURE_SUBSCRIPTION_ID": "sub-123"},
+            ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...",
+        )
         assert cfg.unique_key() == (CloudProvider.AZURE, "sub-123")
 
     def test_unique_key_falls_back_to_env(self):
         with patch.dict(environ, {"AZURE_SUBSCRIPTION_ID": "env-sub"}):
-            cfg = AzureConfig(credentials={}, ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
+            cfg = AzureConfig(
+                credentials={}, ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+            )
             assert cfg.unique_key() == (CloudProvider.AZURE, "env-sub")
 
     def test_unique_key_empty_when_nothing(self):
         with patch.dict(environ, {}, clear=True):
-            cfg = AzureConfig(credentials="", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...")
+            cfg = AzureConfig(
+                credentials="", ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..."
+            )
             assert cfg.unique_key() == (CloudProvider.AZURE, "")
 
 
@@ -115,13 +141,18 @@ class TestAzureConfig:
 # AwsConfig
 # ---------------------------------------------------------------------------
 
+
 class TestAwsConfig:
     def test_provider_is_aws(self, aws_config):
         assert aws_config.provider == CloudProvider.AWS
 
     def test_unique_key_with_dict_credentials(self, aws_config):
         key = aws_config.unique_key()
-        assert key == (CloudProvider.AWS, "fake-aws-access-key-id:fake-aws-secret-access-key")
+        assert key == (
+            CloudProvider.AWS,
+            _fingerprint("fake-aws-access-key-id", "fake-aws-secret-access-key"),
+        )
+        assert "fake-aws-secret-access-key" not in key[1]
 
     def test_unique_key_falls_back_to_env(self):
         with patch.dict(
@@ -132,10 +163,17 @@ class TestAwsConfig:
             },
             clear=True,
         ):
-            cfg = AwsConfig(ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...", credentials=None)
-            assert cfg.unique_key() == (CloudProvider.AWS, "env-ak:env-sk")
+            cfg = AwsConfig(
+                ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...", credentials=None
+            )
+            assert cfg.unique_key() == (
+                CloudProvider.AWS,
+                _fingerprint("env-ak", "env-sk"),
+            )
 
     def test_unique_key_empty_when_no_credentials(self):
         with patch.dict(environ, {}, clear=True):
-            cfg = AwsConfig(ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...", credentials=None)
-            assert cfg.unique_key() == (CloudProvider.AWS, ":")
+            cfg = AwsConfig(
+                ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC...", credentials=None
+            )
+            assert cfg.unique_key() == (CloudProvider.AWS, _fingerprint("", ""))

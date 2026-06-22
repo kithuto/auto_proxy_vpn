@@ -21,6 +21,7 @@ import pytest
 from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
 
 from dotenv import load_dotenv
+
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 pytestmark = [pytest.mark.integration, pytest.mark.azure]
@@ -33,6 +34,7 @@ skip_if_no_creds = pytest.mark.skipif(
     not SUBSCRIPTION_ID or not SSH_KEY,
     reason=skip_reason,
 )
+
 
 @skip_if_no_creds
 class TestAzureIntegration:
@@ -66,12 +68,12 @@ class TestAzureIntegration:
 
     def test_create_batch_via_pool(self, manager: ProxyManagerAzure):
         batch = manager.get_proxies(2, sizes="small", on_exit="destroy")
-        
+
         for proxy in batch:
             assert proxy.is_active(wait=True)
             assert proxy.ip
             assert proxy.port > 0
-        
+
         names = manager.get_running_proxy_names()
         assert isinstance(names, list)
         try:

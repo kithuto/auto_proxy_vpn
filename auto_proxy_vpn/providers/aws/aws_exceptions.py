@@ -1,3 +1,2 @@
 class AwsUnauthorizedOperationError(Exception):
-    def __init__(self, *args):
-        super().__init__(*args)
+    """Raised when AWS rejects an operation because permissions are missing."""

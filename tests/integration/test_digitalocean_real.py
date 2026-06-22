@@ -18,9 +18,12 @@ import os
 import pytest
 from pathlib import Path
 
-from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import ProxyManagerDigitalOcean
+from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import (
+    ProxyManagerDigitalOcean,
+)
 
 from dotenv import load_dotenv
+
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 pytestmark = [pytest.mark.integration, pytest.mark.digitalocean]
@@ -65,12 +68,12 @@ class TestDigitalOceanIntegration:
 
     def test_create_batch(self, manager: ProxyManagerDigitalOcean):
         batch = manager.get_proxies(2, sizes="small", on_exit="destroy")
-        
+
         for proxy in batch:
             assert proxy.is_active(wait=True)
             assert proxy.ip
             assert proxy.port > 0
-        
+
         names = manager.get_running_proxy_names()
         assert isinstance(names, list)
         try:

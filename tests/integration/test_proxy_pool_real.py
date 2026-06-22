@@ -23,7 +23,14 @@ from pathlib import Path
 import pytest
 from dotenv import load_dotenv
 
-from auto_proxy_vpn import BaseConfig, AwsConfig, AzureConfig, DigitalOceanConfig, GoogleConfig, ProxyPool
+from auto_proxy_vpn import (
+    BaseConfig,
+    AwsConfig,
+    AzureConfig,
+    DigitalOceanConfig,
+    GoogleConfig,
+    ProxyPool,
+)
 
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
@@ -115,7 +122,9 @@ class TestProxyPoolRealIntegration:
 
     def test_create_batch_real_and_cleanup(self, pool: ProxyPool):
         # Keep this small to reduce cloud resource usage during integration runs.
-        batch = pool.create_batch(len(AVAILABLE_CONFIGS), sizes="small", on_exit="destroy")
+        batch = pool.create_batch(
+            len(AVAILABLE_CONFIGS), sizes="small", on_exit="destroy"
+        )
         try:
             assert len(batch) <= len(AVAILABLE_CONFIGS)
             for proxy in batch:
@@ -131,4 +140,6 @@ class TestProxyPoolRealIntegration:
         running = pool.get_running_proxy_names()
         for provider, accounts in running.items():
             for _, names in accounts.items():
-                assert len(names) == 0, f"Expected no running proxies for {provider}, but found: {names}"
+                assert len(names) == 0, (
+                    f"Expected no running proxies for {provider}, but found: {names}"
+                )

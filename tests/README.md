@@ -1,27 +1,36 @@
 # Testing
 
-This project uses [pytest](https://docs.pytest.org/) for all automated testing. Tests are split into **unit tests** (fast, fully mocked, no cloud credentials) and **integration tests** (hit real cloud APIs, require credentials and environment variables).
+This project uses [tox](https://tox.wiki/) as the supported entrypoint for automated testing. Tox installs the right dependencies and invokes [pytest](https://docs.pytest.org/) underneath. Tests are split into **unit tests** (fast, fully mocked, no cloud credentials) and **integration tests** (hit real cloud APIs, require credentials and environment variables).
 
 ## Quick Start
 
 ```bash
-# Install the package with test dependencies
-pip install -e ".[test]"
+# Install tox
+python -m pip install tox
 
-# Run all unit tests (the default — no credentials needed)
-pytest
+# Run the full local check suite
+tox
 
-# Run with a coverage report
-pytest --cov=auto_proxy_vpn --cov-report=html
-open htmlcov/index.html        # macOS
+# Run only the default unit tests on a specific Python
+tox -e py314 -- tests/unit/
 
-# Report to terminal
-pytest --cov=auto_proxy_vpn --cov-report=term-missing
+# Run with a terminal coverage report
+tox -e coverage
+```
+
+Useful focused checks:
+
+```bash
+tox -e lint
+tox -e coverage
+tox -e docs
+tox -e package
+tox -e audit
 ```
 
 ## Test Dependencies
 
-All testing dependencies are declared in `pyproject.toml` under `[project.optional-dependencies] test`:
+All testing dependencies are declared in `pyproject.toml` under `[project.optional-dependencies] test` and installed by tox:
 
 | Package        | Purpose                                                |
 |----------------|--------------------------------------------------------|
@@ -93,13 +102,13 @@ Pytest markers control which tests run. They are defined in `pyproject.toml`:
 
 ```bash
 # Only unit tests (this is the default)
-pytest
+tox -e py314 -- tests/unit/
 
 # Only integration tests
-pytest -m integration
+tox -e py314 -- -m integration
 
 # DigitalOcean integration tests only
-pytest -m "integration and digitalocean"
+tox -e py314 -- -m "integration and digitalocean"
 ```
 
 ---
@@ -236,7 +245,7 @@ are destroyed after a run.
 ```bash
 export DIGITALOCEAN_API_TOKEN="dop_v1_..."
 export SSH_KEY="ssh-rsa AAAA..."
-pytest -m integration -k digitalocean
+tox -e py314 -- -m integration -k digitalocean
 ```
 
 #### Google Cloud
@@ -245,7 +254,7 @@ pytest -m integration -k digitalocean
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
 export GOOGLE_PROJECT="my-project-id"
 export SSH_KEY="ssh-rsa AAAA..."
-pytest -m integration -k google
+tox -e py314 -- -m integration -k google
 ```
 
 #### Azure
@@ -256,7 +265,7 @@ export AZURE_TENANT_ID="..."
 export AZURE_CLIENT_ID="..."
 export AZURE_CLIENT_SECRET="..."
 export SSH_KEY="ssh-rsa AAAA..."
-pytest -m integration -k azure
+tox -e py314 -- -m integration -k azure
 ```
 
 #### AWS
@@ -265,7 +274,7 @@ pytest -m integration -k azure
 export AWS_ACCESS_KEY_ID="AKIA..."
 export AWS_SECRET_ACCESS_KEY="..."
 export SSH_KEY="ssh-rsa AAAA..."
-pytest -m integration -k aws
+tox -e py314 -- -m integration -k aws
 ```
 
 ---
@@ -323,14 +332,14 @@ To enable integration tests in CI, configure these repository secrets under **Se
 
 ## Coverage
 
-Coverage is measured with `pytest-cov` and reported in CI as an XML artifact.
+Coverage is measured with `pytest-cov` through tox and reported in CI as an XML artifact.
 
 ```bash
 # Terminal report
-pytest --cov=auto_proxy_vpn --cov-report=term-missing
+tox -e coverage
 
 # HTML report (opens in browser)
-pytest --cov=auto_proxy_vpn --cov-report=html
+tox -e coverage -- --cov-report=html
 open htmlcov/index.html
 ```
 

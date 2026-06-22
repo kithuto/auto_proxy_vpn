@@ -1,9 +1,21 @@
 """Tests for BaseProxy, ProxyBatch, and BaseProxyManager base behaviour."""
 
+from inspect import signature
+
 import pytest
 from unittest.mock import patch
 
-from auto_proxy_vpn.utils.base_proxy import ProxyBatch
+from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
+from auto_proxy_vpn.providers.azure.azure_proxy import ProxyManagerAzure
+from auto_proxy_vpn.providers.digitalocean.digitalocean_proxy import (
+    ProxyManagerDigitalOcean,
+)
+from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
+from auto_proxy_vpn.utils.base_proxy import (
+    BaseProxyManager,
+    ProxyBatch,
+    normalize_get_proxy_by_name_options,
+)
 from auto_proxy_vpn.utils.exceptions import ProxyIpNotAvailableException
 from tests.conftest import StubProxy
 
@@ -12,6 +24,45 @@ from tests.conftest import StubProxy
 # BaseProxy
 # ============================================================================
 
+
+class TestGetProxyByNameSignature:
+    """Contract for backwards-compatible positional arguments."""
+
+    @pytest.mark.parametrize(
+        "manager_cls",
+        [
+            BaseProxyManager,
+            ProxyManagerAws,
+            ProxyManagerAzure,
+            ProxyManagerDigitalOcean,
+            ProxyManagerGoogle,
+        ],
+    )
+    def test_is_async_stays_before_auth(self, manager_cls):
+        params = list(signature(manager_cls.get_proxy_by_name).parameters)
+        assert params[:5] == ["self", "name", "is_async", "auth", "on_exit"]
+
+    def test_auth_dict_as_second_positional_argument_is_rejected(self):
+        auth = {"user": "alice", "password": "secret"}
+
+        with pytest.raises(TypeError, match="is_async"):
+            normalize_get_proxy_by_name_options(auth, None)
+
+    def test_is_async_as_second_positional_argument_is_still_supported(self):
+        is_async, auth = normalize_get_proxy_by_name_options(True, None)
+
+        assert is_async is True
+        assert auth is None
+
+    def test_auth_keyword_is_still_supported(self):
+        auth = {"user": "alice", "password": "secret"}
+
+        is_async, normalized_auth = normalize_get_proxy_by_name_options(False, auth)
+
+        assert is_async is False
+        assert normalized_auth == auth
+
+
 class TestBaseProxyStr:
     """Proxy string / URL generation."""
 
@@ -19,14 +70,19 @@ class TestBaseProxyStr:
         assert stub_proxy.get_proxy_str() == "http://1.2.3.4:12345"
 
     def test_get_proxy_str_with_auth(self, stub_proxy_with_auth):
-        assert stub_proxy_with_auth.get_proxy_str() == "http://admin:s3cret@1.2.3.4:12345"
+        assert (
+            stub_proxy_with_auth.get_proxy_str() == "http://admin:s3cret@1.2.3.4:12345"
+        )
 
     def test_get_proxy_str_empty_when_no_ip(self, inactive_proxy):
         assert inactive_proxy.get_proxy_str() == ""
 
     def test_get_proxy_returns_dict(self, stub_proxy):
         result = stub_proxy.get_proxy()
-        assert result == {"http": "http://1.2.3.4:12345", "https": "http://1.2.3.4:12345"}
+        assert result == {
+            "http": "http://1.2.3.4:12345",
+            "https": "http://1.2.3.4:12345",
+        }
 
     def test_get_proxy_returns_none_when_no_ip(self, inactive_proxy):
         assert inactive_proxy.get_proxy() is None
@@ -35,6 +91,12 @@ class TestBaseProxyStr:
         s = str(stub_proxy)
         assert "stub-proxy" in s
         assert "1.2.3.4" in s
+
+    def test_str_redacts_auth(self, stub_proxy_with_auth):
+        s = str(stub_proxy_with_auth)
+        assert "s3cret" not in s
+        assert "admin" not in s
+        assert "***:***" in s
 
     def test_repr_equals_str(self, stub_proxy):
         assert repr(stub_proxy) == str(stub_proxy)
@@ -73,7 +135,9 @@ class TestBaseProxyIsActive:
         stub_proxy.active = False
         with patch(
             "auto_proxy_vpn.utils.base_proxy.get_public_ip",
-            side_effect=OSError("Tunnel connection failed: 407 Proxy Authentication Required"),
+            side_effect=OSError(
+                "Tunnel connection failed: 407 Proxy Authentication Required"
+            ),
         ):
             assert stub_proxy.is_active(wait=True) is False
 
@@ -122,6 +186,7 @@ class TestBaseProxyContextManager:
 # ============================================================================
 # ProxyBatch
 # ============================================================================
+
 
 class TestProxyBatch:
     """Tests for the ProxyBatch container."""
@@ -182,6 +247,7 @@ class TestProxyBatch:
 # BaseProxyManager — get_proxies validation
 # ============================================================================
 
+
 class TestBaseProxyManagerGetProxies:
     """Tests for parameter validation in BaseProxyManager.get_proxies."""
 
@@ -232,7 +298,9 @@ class TestBaseProxyManagerGetProxies:
 
     def test_invalid_auth_type_in_list_raises(self, stub_manager):
         with pytest.raises(TypeError, match="auth"):
-            stub_manager.get_proxies(2, auths=[{"user": "u", "password": "p"}, "bad-auth"])
+            stub_manager.get_proxies(
+                2, auths=[{"user": "u", "password": "p"}, "bad-auth"]
+            )
 
     def test_auth_missing_keys_raises(self, stub_manager):
         with pytest.raises(KeyError, match="two keys"):

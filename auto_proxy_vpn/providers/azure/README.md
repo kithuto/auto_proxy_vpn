@@ -224,8 +224,8 @@ proxy = manager.get_proxy(
     port=0,                 # int — proxy port (0 = random 10000–65000)
     size="medium",          # "small" | "medium" | "large"
     region="",              # str — Azure region (empty = random)
-    auth={},                # {"user": ..., "password": ...} — basic auth
-    allowed_ips=[],         # str | list[str] — allowed source IPs (your IP is auto-added)
+    auth=None,              # {"user": ..., "password": ...} | None — basic auth
+    allowed_ips=None,       # str | list[str] | None — allowed source IPs (your IP is auto-added)
     is_async=False,         # bool — return immediately without waiting for full startup
     retry=True,             # bool — retry in a different region on failure
     proxy_name="",          # str — explicit name (empty = auto-generated)
@@ -257,6 +257,7 @@ Reload a previously created (and still running) proxy by name.
 ```python
 proxy = manager.get_proxy_by_name(
     name="proxy1",          # str — existing proxy resource group name
+    auth=None,              # {"user": ..., "password": ...} | None — required for auth proxies
     is_async=False,         # bool
     on_exit="destroy",      # "destroy" | "keep"
 )
@@ -336,7 +337,11 @@ proxy = manager.get_proxy(on_exit="keep")
 proxy.close()  # resources are NOT deleted
 
 # Later, reconnect to it:
-proxy = manager.get_proxy_by_name("proxy1", on_exit="destroy")
+proxy = manager.get_proxy_by_name(
+    "proxy1",
+    auth={"user": "alice", "password": "secret"},  # only needed for auth proxies
+    on_exit="destroy",
+)
 ```
 
 ### Asynchronous Creation

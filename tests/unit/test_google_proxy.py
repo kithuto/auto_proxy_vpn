@@ -16,10 +16,17 @@ from types import SimpleNamespace
 from pathlib import Path
 import builtins
 
+from auto_proxy_vpn.utils.exceptions import (
+    ProxyAuthenticationError,
+    ProxyAuthRequiredError,
+)
+from tests.conftest import make_auth_metadata_comment
+
 
 # ---------------------------------------------------------------------------
 # Helpers — mock the google-cloud-compute SDK
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_google_sdk():
     """Build a complete mock of google.cloud.compute_v1 and friends.
@@ -82,21 +89,26 @@ def _make_mock_google_sdk():
     # ── google.api_core.exceptions ────────────────────────────────────
     google_exceptions = MagicMock()
     google_exceptions.ServiceUnavailable = type(
-        "ServiceUnavailable", (Exception,), {},
+        "ServiceUnavailable",
+        (Exception,),
+        {},
     )
 
     # ── google.oauth2.service_account ─────────────────────────────────
     service_account = MagicMock()
-    service_account.Credentials.from_service_account_file.return_value = (
-        MagicMock()
-    )
+    service_account.Credentials.from_service_account_file.return_value = MagicMock()
 
-    return compute_v1, google_exceptions, service_account, {
-        "machine_types_client": machine_types_client,
-        "images_client": images_client,
-        "instances_client": instances_client,
-        "firewall_client": firewall_client,
-    }
+    return (
+        compute_v1,
+        google_exceptions,
+        service_account,
+        {
+            "machine_types_client": machine_types_client,
+            "images_client": images_client,
+            "instances_client": instances_client,
+            "firewall_client": firewall_client,
+        },
+    )
 
 
 def _make_sys_modules_patch(compute_v1, google_exceptions, service_account):
@@ -137,11 +149,11 @@ def _build_google_manager():
     Returns ``(manager, clients_dict)`` so tests can further configure
     individual client return values before exercising the manager.
     """
-    compute_v1, google_exceptions, service_account, clients = (
-        _make_mock_google_sdk()
-    )
+    compute_v1, google_exceptions, service_account, clients = _make_mock_google_sdk()
     modules = _make_sys_modules_patch(
-        compute_v1, google_exceptions, service_account,
+        compute_v1,
+        google_exceptions,
+        service_account,
     )
 
     with patch.dict("sys.modules", modules):
@@ -163,8 +175,8 @@ def _build_google_manager():
 # ProxyManagerGoogle — constructor
 # ============================================================================
 
-class TestProxyManagerGoogleInit:
 
+class TestProxyManagerGoogleInit:
     def test_creates_manager_with_mocked_sdk(self):
         mgr, _ = _build_google_manager()
         assert mgr.project == "test-project"
@@ -187,11 +199,11 @@ class TestProxyManagerGoogleInit:
         assert "europe-west1" in region_names
 
     def test_no_credentials_raises(self):
-        compute_v1, google_exceptions, service_account, _ = (
-            _make_mock_google_sdk()
-        )
+        compute_v1, google_exceptions, service_account, _ = _make_mock_google_sdk()
         modules = _make_sys_modules_patch(
-            compute_v1, google_exceptions, service_account,
+            compute_v1,
+            google_exceptions,
+            service_account,
         )
 
         with (
@@ -204,6 +216,7 @@ class TestProxyManagerGoogleInit:
             from auto_proxy_vpn.providers.google.google_exceptions import (
                 GoogleAuthException,
             )
+
             with pytest.raises(GoogleAuthException):
                 ProxyManagerGoogle(ssh_key="key", project="proj")
 
@@ -211,6 +224,7 @@ class TestProxyManagerGoogleInit:
         from auto_proxy_vpn.providers.google.google_proxy import (
             ProxyManagerGoogle,
         )
+
         with pytest.raises(ValueError):
             ProxyManagerGoogle.from_config(None, None)
 
@@ -218,10 +232,16 @@ class TestProxyManagerGoogleInit:
         from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
         from auto_proxy_vpn.configs import GoogleConfig, ManagerRuntimeConfig
 
-        cfg = GoogleConfig(project="test-project", credentials="/tmp/fake.json", ssh_key="ssh-rsa AAAA...")
+        cfg = GoogleConfig(
+            project="test-project",
+            credentials="/tmp/fake.json",
+            ssh_key="ssh-rsa AAAA...",
+        )
         runtime = ManagerRuntimeConfig(log=False)
 
-        with patch.object(ProxyManagerGoogle, "__init__", return_value=None) as mock_init:
+        with patch.object(
+            ProxyManagerGoogle, "__init__", return_value=None
+        ) as mock_init:
             manager = ProxyManagerGoogle.from_config(cfg, runtime)
 
         assert manager is not None
@@ -232,10 +252,13 @@ class TestProxyManagerGoogleInit:
         key_file.write_text("ssh-rsa AAAA\nssh-rsa BBBB\n", encoding="utf-8")
 
         compute_v1, google_exceptions, service_account, _ = _make_mock_google_sdk()
-        modules = _make_sys_modules_patch(compute_v1, google_exceptions, service_account)
+        modules = _make_sys_modules_patch(
+            compute_v1, google_exceptions, service_account
+        )
 
         with patch.dict("sys.modules", modules):
             from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
+
             mgr = ProxyManagerGoogle(
                 ssh_key=str(key_file),
                 project="test-project",
@@ -247,10 +270,13 @@ class TestProxyManagerGoogleInit:
 
     def test_bad_ssh_key_dict_raises_type_error(self):
         compute_v1, google_exceptions, service_account, _ = _make_mock_google_sdk()
-        modules = _make_sys_modules_patch(compute_v1, google_exceptions, service_account)
+        modules = _make_sys_modules_patch(
+            compute_v1, google_exceptions, service_account
+        )
 
         with patch.dict("sys.modules", modules):
             from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
+
             with pytest.raises(TypeError, match="Bad ssh_key"):
                 ProxyManagerGoogle(
                     ssh_key=[{"name": "k-without-public-key"}],  # type: ignore[list-item]
@@ -261,10 +287,13 @@ class TestProxyManagerGoogleInit:
 
     def test_no_valid_ssh_keys_found_raises(self):
         compute_v1, google_exceptions, service_account, _ = _make_mock_google_sdk()
-        modules = _make_sys_modules_patch(compute_v1, google_exceptions, service_account)
+        modules = _make_sys_modules_patch(
+            compute_v1, google_exceptions, service_account
+        )
 
         with patch.dict("sys.modules", modules):
             from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
+
             with pytest.raises(TypeError, match="No valid ssh keys found"):
                 ProxyManagerGoogle(
                     ssh_key=["invalid-key", "still-invalid"],
@@ -283,6 +312,7 @@ class TestProxyManagerGoogleInit:
 
         with patch("builtins.__import__", side_effect=_fake_import):
             from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
+
             with pytest.raises(ImportError, match=r"auto_proxy_vpn\[google\]"):
                 ProxyManagerGoogle(
                     ssh_key="ssh-rsa AAAA...",
@@ -293,11 +323,20 @@ class TestProxyManagerGoogleInit:
 
     def test_logger_is_configured_when_enabled(self):
         compute_v1, google_exceptions, service_account, _ = _make_mock_google_sdk()
-        modules = _make_sys_modules_patch(compute_v1, google_exceptions, service_account)
+        modules = _make_sys_modules_patch(
+            compute_v1, google_exceptions, service_account
+        )
 
         with patch.dict("sys.modules", modules):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.basicConfig") as mock_basic:
-                from auto_proxy_vpn.providers.google.google_proxy import ProxyManagerGoogle
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.get_proxy_logger"
+            ) as mock_get_logger:
+                mock_logger = MagicMock()
+                mock_get_logger.return_value = mock_logger
+                from auto_proxy_vpn.providers.google.google_proxy import (
+                    ProxyManagerGoogle,
+                )
+
                 mgr = ProxyManagerGoogle(
                     ssh_key="ssh-rsa AAAA...",
                     project="test-project",
@@ -305,16 +344,16 @@ class TestProxyManagerGoogleInit:
                     log=True,
                 )
 
-        assert mgr.logger is not None
-        mock_basic.assert_called_once()
+        assert mgr.logger is mock_logger
+        mock_get_logger.assert_called_once()
 
 
 # ============================================================================
 # ProxyManagerGoogle — get_proxy
 # ============================================================================
 
-class TestProxyManagerGoogleGetProxy:
 
+class TestProxyManagerGoogleGetProxy:
     def test_get_proxy_creates_instance(self):
         mgr, clients = _build_google_manager()
 
@@ -444,18 +483,21 @@ class TestProxyManagerGoogleGetProxy:
                     return_value=True,
                 ):
                     proxy = mgr.get_proxy(size="small", is_async=True)
-        print(proxy.ip)
+
         assert proxy.ip == "35.0.0.99"
 
     def test_get_proxy_auto_name_skips_existing_names(self):
         mgr, clients = _build_google_manager()
 
-        inst1 = MagicMock(); inst1.name = "proxy1"
-        inst2 = MagicMock(); inst2.name = "proxy2"
+        inst1 = MagicMock()
+        inst1.name = "proxy1"
+        inst2 = MagicMock()
+        inst2.name = "proxy2"
 
         class _AggEntry:
             def __init__(self, instances):
                 self.instances = instances
+
             def __contains__(self, key):
                 return key == "instances" and bool(self.instances)
 
@@ -463,8 +505,14 @@ class TestProxyManagerGoogleGetProxy:
             ("zones/us-central1-a", _AggEntry([inst1, inst2]))
         ]
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.get_public_ip", return_value="1.2.3.4"):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.7", False)) as mock_start:
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+                return_value=("35.0.0.7", False),
+            ) as mock_start:
                 with patch(
                     "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active",
                     return_value=True,
@@ -478,10 +526,21 @@ class TestProxyManagerGoogleGetProxy:
         mgr, clients = _build_google_manager()
         clients["instances_client"].aggregated_list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.get_public_ip", return_value="1.2.3.4"):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.8", False)) as mock_start:
-                with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active", return_value=True):
-                    proxy = mgr.get_proxy(size="small", is_async=True, region="us-central1")
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+                return_value=("35.0.0.8", False),
+            ) as mock_start:
+                with patch(
+                    "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active",
+                    return_value=True,
+                ):
+                    proxy = mgr.get_proxy(
+                        size="small", is_async=True, region="us-central1"
+                    )
 
         assert proxy.region == "us-central1"
         assert mock_start.call_args.args[3] == "us-central1"
@@ -490,21 +549,33 @@ class TestProxyManagerGoogleGetProxy:
         mgr, clients = _build_google_manager()
         clients["instances_client"].aggregated_list.return_value = []
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.get_public_ip", return_value="35.0.0.9"):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.9", False)) as mock_start:
-                with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active", return_value=True):
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.get_public_ip",
+            return_value="35.0.0.9",
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+                return_value=("35.0.0.9", False),
+            ) as mock_start:
+                with patch(
+                    "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active",
+                    return_value=True,
+                ):
                     mgr.get_proxy(size="small", allowed_ips="5.5.5.5", is_async=True)
 
         passed_allowed_ips = mock_start.call_args.args[7]
-        assert "5.5.5.5" in passed_allowed_ips
-        assert "35.0.0.9" in passed_allowed_ips
+        assert "5.5.5.5/32" in passed_allowed_ips
+        assert "35.0.0.9/32" in passed_allowed_ips
 
     def test_get_proxy_logs_warning_and_error(self):
         mgr, clients = _build_google_manager()
         clients["instances_client"].aggregated_list.return_value = []
         mgr.logger = MagicMock()
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
             with patch(
                 "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
                 side_effect=[("", True), ("", True)],
@@ -518,8 +589,10 @@ class TestProxyManagerGoogleGetProxy:
     def test_get_proxy_auto_name_while_increment_branch(self):
         mgr, clients = _build_google_manager()
 
-        inst1 = MagicMock(); inst1.name = "proxy1"
-        inst3 = MagicMock(); inst3.name = "proxy3"
+        inst1 = MagicMock()
+        inst1.name = "proxy1"
+        inst3 = MagicMock()
+        inst3.name = "proxy3"
         instances = [inst1, inst3]
 
         class _AggEntry:
@@ -533,9 +606,18 @@ class TestProxyManagerGoogleGetProxy:
             ("zones/us-central1-a", _AggEntry(instances))
         ]
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.get_public_ip", return_value="1.2.3.4"):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.10", False)) as mock_start:
-                with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active", return_value=True):
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.get_public_ip",
+            return_value="1.2.3.4",
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+                return_value=("35.0.0.10", False),
+            ) as mock_start:
+                with patch(
+                    "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active",
+                    return_value=True,
+                ):
                     proxy = mgr.get_proxy(size="small", is_async=True)
 
         assert proxy.name == "proxy4"
@@ -546,8 +628,8 @@ class TestProxyManagerGoogleGetProxy:
 # GoogleProxy
 # ============================================================================
 
-class TestGoogleProxy:
 
+class TestGoogleProxy:
     def test_str_contains_google(self):
         mgr, _ = _build_google_manager()
 
@@ -570,12 +652,19 @@ class TestGoogleProxy:
     def test_bad_on_exit_raises(self):
         mgr, _ = _build_google_manager()
         from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
         with pytest.raises(ValueError, match="on_exit"):
             with patch.object(GoogleProxy, "is_active", return_value=True):
                 GoogleProxy(
-                    manager=mgr, name="p", ip="1.1.1.1", port=80,
-                    project="proj", region="r", zone="z",
-                    is_async=True, on_exit="invalid",  # type: ignore
+                    manager=mgr,
+                    name="p",
+                    ip="1.1.1.1",
+                    port=80,
+                    project="proj",
+                    region="r",
+                    zone="z",
+                    is_async=True,
+                    on_exit="invalid",  # type: ignore
                 )
 
     def test_init_logs_when_sync_with_logger(self):
@@ -626,13 +715,21 @@ class TestGoogleProxy:
         from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
 
         inst = SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.0.0.50")])]
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.0.0.50")])
+            ]
         )
         clients["instances_client"].get.return_value = inst
-        
+
         with patch.object(GoogleProxy, "is_active", return_value=True):
-            with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.0.0.50"):
-                with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.9", False)):
+            with patch(
+                "auto_proxy_vpn.utils.base_proxy.get_public_ip",
+                return_value="35.0.0.50",
+            ):
+                with patch(
+                    "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+                    return_value=("35.0.0.9", False),
+                ):
                     proxy = GoogleProxy(
                         manager=mgr,
                         name="proxy-async",
@@ -646,7 +743,9 @@ class TestGoogleProxy:
                         on_exit="destroy",
                     )
 
-        with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.0.0.50"):
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.0.0.50"
+        ):
             assert proxy.is_active(wait=False) is True
         assert proxy.ip == "35.0.0.50"
 
@@ -655,9 +754,14 @@ class TestGoogleProxy:
         from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
 
         clients["instances_client"].get.side_effect = Exception("down")
-        
-        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("", True)):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+            return_value=("", True),
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy"
+            ) as mock_stop:
                 _ = GoogleProxy(
                     manager=mgr,
                     name="proxy-retry-fail",
@@ -677,11 +781,16 @@ class TestGoogleProxy:
         mgr, clients = _build_google_manager()
         from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
 
-        op = SimpleNamespace(result=lambda timeout=0: None, error_code=None, warnings=[])
+        op = SimpleNamespace(
+            result=lambda timeout=0: None, error_code=None, warnings=[]
+        )
         clients["firewall_client"].delete.return_value = op
         clients["instances_client"].delete.return_value = op
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.wait_for_extended_operation", return_value=None):
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.wait_for_extended_operation",
+            return_value=None,
+        ):
             with patch.object(GoogleProxy, "is_active", return_value=True):
                 proxy = GoogleProxy(
                     manager=mgr,
@@ -739,9 +848,17 @@ class TestGoogleProxy:
             )
 
         proxy.retried = False
-        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.77", False)):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
-                with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.0.0.77"):
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+            return_value=("35.0.0.77", False),
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy"
+            ) as mock_stop:
+                with patch(
+                    "auto_proxy_vpn.utils.base_proxy.get_public_ip",
+                    return_value="35.0.0.77",
+                ):
                     assert proxy.is_active(wait=False) is True
 
         mock_stop.assert_called_once_with(reset=False)
@@ -770,8 +887,13 @@ class TestGoogleProxy:
                 on_exit="destroy",
             )
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("", True)):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+            return_value=("", True),
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy"
+            ) as mock_stop:
                 assert proxy.is_active(wait=False) is False
 
         assert mock_stop.call_count >= 2
@@ -800,7 +922,9 @@ class TestGoogleProxy:
             )
 
         proxy.retried = True
-        with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy"
+        ) as mock_stop:
             assert proxy.is_active(wait=False) is False
 
         mock_stop.assert_called_once()
@@ -811,7 +935,9 @@ class TestGoogleProxy:
         from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
 
         empty_inst = SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="")])]
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="")])
+            ]
         )
         clients["instances_client"].get.return_value = empty_inst
 
@@ -836,7 +962,9 @@ class TestGoogleProxy:
         from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
 
         empty_inst = SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="")])]
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="")])
+            ]
         )
         clients["instances_client"].get.return_value = empty_inst
 
@@ -854,7 +982,9 @@ class TestGoogleProxy:
                 on_exit="destroy",
             )
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.sleep", return_value=None):
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.sleep", return_value=None
+        ):
             assert proxy.is_active(wait=False) is False
 
     def test_is_active_sync_retry_then_success(self):
@@ -879,9 +1009,17 @@ class TestGoogleProxy:
                 on_exit="destroy",
             )
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("35.0.0.88", False)):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
-                with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.0.0.88"):
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+            return_value=("35.0.0.88", False),
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy"
+            ) as mock_stop:
+                with patch(
+                    "auto_proxy_vpn.utils.base_proxy.get_public_ip",
+                    return_value="35.0.0.88",
+                ):
                     assert proxy.is_active(wait=False) is True
 
         mock_stop.assert_called_once_with(reset=False)
@@ -909,8 +1047,13 @@ class TestGoogleProxy:
                 on_exit="destroy",
             )
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.start_proxy", return_value=("", True)):
-            with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.start_proxy",
+            return_value=("", True),
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy"
+            ) as mock_stop:
                 assert proxy.is_active(wait=False) is False
 
         assert mock_stop.call_count >= 2
@@ -939,7 +1082,9 @@ class TestGoogleProxy:
             )
 
         proxy.retried = True
-        with patch("auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy") as mock_stop:
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy._stop_proxy"
+        ) as mock_stop:
             assert proxy.is_active(wait=False) is False
 
         mock_stop.assert_called_once()
@@ -950,7 +1095,9 @@ class TestGoogleProxy:
         from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
 
         logger = MagicMock()
-        op = SimpleNamespace(result=lambda timeout=0: None, error_code=None, warnings=[])
+        op = SimpleNamespace(
+            result=lambda timeout=0: None, error_code=None, warnings=[]
+        )
         clients["firewall_client"].delete.return_value = op
         clients["instances_client"].delete.return_value = op
 
@@ -969,7 +1116,10 @@ class TestGoogleProxy:
                 on_exit="destroy",
             )
 
-        with patch("auto_proxy_vpn.providers.google.google_proxy.wait_for_extended_operation", return_value=None) as wait_mock:
+        with patch(
+            "auto_proxy_vpn.providers.google.google_proxy.wait_for_extended_operation",
+            return_value=None,
+        ) as wait_mock:
             proxy._stop_proxy(wait=True)
 
         assert wait_mock.call_count == 2
@@ -1052,8 +1202,8 @@ class TestGoogleProxy:
 # get_running_proxy_names
 # ============================================================================
 
-class TestGoogleRunningNames:
 
+class TestGoogleRunningNames:
     def test_returns_list(self):
         mgr, clients = _build_google_manager()
 
@@ -1067,6 +1217,7 @@ class TestGoogleRunningNames:
         class _AggEntry:
             def __init__(self, instances):
                 self.instances = instances
+
             def __contains__(self, key):
                 return key == "instances" and bool(self.instances)
 
@@ -1091,18 +1242,22 @@ class TestProxyManagerGoogleGetProxyByName:
 
     def test_get_proxy_by_name_success_with_auth_and_allowed_ips(self):
         from auto_proxy_vpn.providers.google.google_proxy import GoogleProxy
+
         mgr, clients = _build_google_manager()
 
         startup_script = (
             "http_port 3128\n"
             "acl custom_ips src 10.0.0.1\n"
             "acl custom_ips src 10.0.0.2\n"
-            "#auth credentials: user: alice, password: secret\n"
+            f"{make_auth_metadata_comment('alice', 'secret')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
         )
 
         metadata_item = SimpleNamespace(key="startup-script", value=startup_script)
         proxy_info = SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.10")])],
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.10")])
+            ],
             metadata=SimpleNamespace(items=[metadata_item]),
             zone="projects/test/zones/us-central1-a",
             machine_type="projects/test/zones/us-central1-a/machineTypes/e2-micro",
@@ -1121,24 +1276,41 @@ class TestProxyManagerGoogleGetProxyByName:
             return_value="35.10.10.10",
         ):
             with patch.object(GoogleProxy, "is_active", return_value=True):
-                proxy = mgr.get_proxy_by_name("proxy1", on_exit="keep", is_async=True)
+                proxy = mgr.get_proxy_by_name(
+                    "proxy1",
+                    auth={"user": "alice", "password": "secret"},
+                    on_exit="keep",
+                    is_async=True,
+                )
 
         assert proxy.name == "proxy1"
         assert proxy.ip == "35.10.10.10"
         assert proxy.port == 3128
         assert proxy.user == "alice"
         assert proxy.password == "secret"
-        assert proxy.allowed_ips == ["10.0.0.1", "10.0.0.2"]
+        assert proxy.allowed_ips == ["10.0.0.1/32", "10.0.0.2/32"]
         assert proxy.destroy is False
 
-    def test_get_proxy_by_name_logs_when_logger_present(self):
+    @pytest.mark.parametrize(
+        ("auth", "exception"),
+        [
+            (None, ProxyAuthRequiredError),
+            ({"user": "alice", "password": "wrong"}, ProxyAuthenticationError),
+        ],
+    )
+    def test_get_proxy_by_name_auth_errors(self, auth, exception):
         mgr, clients = _build_google_manager()
-        mgr.logger = MagicMock()
 
-        startup_script = "http_port 3128\n"
+        startup_script = (
+            "http_port 3128\n"
+            f"{make_auth_metadata_comment('alice', 'secret')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
+        )
         metadata_item = SimpleNamespace(key="startup-script", value=startup_script)
         proxy_info = SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.11")])],
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.10")])
+            ],
             metadata=SimpleNamespace(items=[metadata_item]),
             zone="projects/test/zones/us-central1-a",
             machine_type="projects/test/zones/us-central1-a/machineTypes/e2-micro",
@@ -1152,8 +1324,39 @@ class TestProxyManagerGoogleGetProxyByName:
             ("zones/us-central1-a", _AggResp([proxy_info])),
         ]
 
-        with patch("auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.10.10.11"):
-            with patch('auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active', return_value=True):
+        with pytest.raises(exception):
+            mgr.get_proxy_by_name("proxy1", auth=auth)
+
+    def test_get_proxy_by_name_logs_when_logger_present(self):
+        mgr, clients = _build_google_manager()
+        mgr.logger = MagicMock()
+
+        startup_script = "http_port 3128\n"
+        metadata_item = SimpleNamespace(key="startup-script", value=startup_script)
+        proxy_info = SimpleNamespace(
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.11")])
+            ],
+            metadata=SimpleNamespace(items=[metadata_item]),
+            zone="projects/test/zones/us-central1-a",
+            machine_type="projects/test/zones/us-central1-a/machineTypes/e2-micro",
+        )
+
+        class _AggResp:
+            def __init__(self, instances):
+                self.instances = instances
+
+        clients["instances_client"].aggregated_list.return_value = [
+            ("zones/us-central1-a", _AggResp([proxy_info])),
+        ]
+
+        with patch(
+            "auto_proxy_vpn.utils.base_proxy.get_public_ip", return_value="35.10.10.11"
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.google.google_proxy.GoogleProxy.is_active",
+                return_value=True,
+            ):
                 mgr.get_proxy_by_name("proxy1", is_async=True)
 
         assert mgr.logger.info.called
@@ -1162,7 +1365,9 @@ class TestProxyManagerGoogleGetProxyByName:
         mgr, clients = _build_google_manager()
 
         proxy_info = SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.10")])],
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.10")])
+            ],
             metadata=SimpleNamespace(items=[]),
             zone="projects/test/zones/us-central1-a",
             machine_type="projects/test/zones/us-central1-a/machineTypes/e2-micro",
@@ -1184,7 +1389,9 @@ class TestProxyManagerGoogleGetProxyByName:
 
         metadata_item = SimpleNamespace(key="startup-script", value="http_port nope\n")
         proxy_info = SimpleNamespace(
-            network_interfaces=[SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.10")])],
+            network_interfaces=[
+                SimpleNamespace(access_configs=[SimpleNamespace(nat_i_p="35.10.10.10")])
+            ],
             metadata=SimpleNamespace(items=[metadata_item]),
             zone="projects/test/zones/us-central1-a",
             machine_type="projects/test/zones/us-central1-a/machineTypes/e2-micro",

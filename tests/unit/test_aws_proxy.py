@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import builtins
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from auto_proxy_vpn.configs import ManagerRuntimeConfig
+from auto_proxy_vpn.utils.exceptions import (
+    ProxyAuthenticationError,
+    ProxyAuthRequiredError,
+)
+from tests.conftest import make_auth_metadata_comment
 
 
 VALID_SSH_KEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQAwsUnitTestKeyMaterial"
@@ -219,7 +223,11 @@ class TestProxyManagerAwsInit:
                 "botocore.exceptions": MagicMock(ClientError=MockClientError),
             },
         ):
-            with patch("auto_proxy_vpn.providers.aws.aws_proxy.basicConfig") as mock_basic:
+            with patch(
+                "auto_proxy_vpn.providers.aws.aws_proxy.get_proxy_logger"
+            ) as mock_get_logger:
+                mock_logger = MagicMock()
+                mock_get_logger.return_value = mock_logger
                 from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
 
                 mgr = ProxyManagerAws(
@@ -231,8 +239,8 @@ class TestProxyManagerAwsInit:
                     log=True,
                 )
 
-        assert mgr.logger is not None
-        mock_basic.assert_called_once()
+        assert mgr.logger is mock_logger
+        mock_get_logger.assert_called_once()
 
     def test_from_config_with_none_raises(self):
         from auto_proxy_vpn.providers.aws.aws_proxy import ProxyManagerAws
@@ -338,8 +346,13 @@ class TestProxyManagerAwsGetProxy:
     def test_get_proxy_name_autoincrements_when_existing_names_taken(self):
         mgr, _ = _build_aws_manager()
 
-        with patch.object(mgr, "get_running_proxy_names", return_value=["proxy1", "proxy2", "proxy3"]):
-            with patch("auto_proxy_vpn.providers.aws.aws_proxy.get_public_ip", return_value="1.2.3.4"):
+        with patch.object(
+            mgr, "get_running_proxy_names", return_value=["proxy1", "proxy2", "proxy3"]
+        ):
+            with patch(
+                "auto_proxy_vpn.providers.aws.aws_proxy.get_public_ip",
+                return_value="1.2.3.4",
+            ):
                 with patch(
                     "auto_proxy_vpn.providers.aws.aws_proxy.start_proxy",
                     return_value=("54.0.0.2", "i-2", "sg-2", False),
@@ -352,22 +365,30 @@ class TestProxyManagerAwsGetProxy:
         mgr, _ = _build_aws_manager()
 
         with patch.object(mgr, "get_running_proxy_names", return_value=[]):
-            with patch("auto_proxy_vpn.providers.aws.aws_proxy.get_public_ip", return_value="1.2.3.4"):
+            with patch(
+                "auto_proxy_vpn.providers.aws.aws_proxy.get_public_ip",
+                return_value="1.2.3.4",
+            ):
                 with patch(
                     "auto_proxy_vpn.providers.aws.aws_proxy.start_proxy",
                     return_value=("54.0.0.3", "i-3", "sg-3", False),
                 ) as start_mock:
-                    proxy = mgr.get_proxy(allowed_ips="8.8.8.8", size="small", is_async=True)
+                    proxy = mgr.get_proxy(
+                        allowed_ips="8.8.8.8", size="small", is_async=True
+                    )
 
         assert proxy.ip == "54.0.0.3"
-        assert start_mock.call_args.args[5] == ["8.8.8.8", "1.2.3.4"]
+        assert start_mock.call_args.args[5] == ["8.8.8.8/32", "1.2.3.4/32"]
 
     def test_get_proxy_logs_info_warning_and_error(self):
         mgr, _ = _build_aws_manager()
         mgr.logger = MagicMock()
 
         with patch.object(mgr, "get_running_proxy_names", return_value=[]):
-            with patch("auto_proxy_vpn.providers.aws.aws_proxy.get_public_ip", return_value="1.2.3.4"):
+            with patch(
+                "auto_proxy_vpn.providers.aws.aws_proxy.get_public_ip",
+                return_value="1.2.3.4",
+            ):
                 with patch(
                     "auto_proxy_vpn.providers.aws.aws_proxy.start_proxy",
                     side_effect=[("", "", "", True), ("", "", "", True)],
@@ -408,7 +429,9 @@ class TestProxyManagerAwsReloadAndList:
         }
         sdk["boto3"].client.return_value = client
 
-        with patch.object(mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]):
+        with patch.object(
+            mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]
+        ):
             with patch("auto_proxy_vpn.providers.aws.aws_proxy.SSHClient") as ssh_cls:
                 ssh_cls.return_value.run_command.return_value = ("", "", "")
                 with pytest.raises(ConnectionError, match="AWS proxy"):
@@ -434,9 +457,15 @@ class TestProxyManagerAwsReloadAndList:
         }
         sdk["boto3"].client.return_value = client
 
-        with patch.object(mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]):
+        with patch.object(
+            mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]
+        ):
             with patch("auto_proxy_vpn.providers.aws.aws_proxy.SSHClient") as ssh_cls:
-                ssh_cls.return_value.run_command.return_value = ("", "acl custom_ips src 1.2.3.4", "")
+                ssh_cls.return_value.run_command.return_value = (
+                    "",
+                    "acl custom_ips src 1.2.3.4",
+                    "",
+                )
                 with pytest.raises(ValueError, match="proxy port"):
                     mgr.get_proxy_by_name("proxy1")
 
@@ -460,20 +489,72 @@ class TestProxyManagerAwsReloadAndList:
         }
         sdk["boto3"].client.return_value = client
 
-        squid_cfg = """http_port 3128
-acl custom_ips src 1.2.3.4
-#auth credentials: user: u1, password: p1
-"""
+        squid_cfg = (
+            "http_port 3128\n"
+            "acl custom_ips src 1.2.3.4\n"
+            f"{make_auth_metadata_comment('u1', 'p1')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
+        )
 
-        with patch.object(mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]):
+        with patch.object(
+            mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]
+        ):
             with patch("auto_proxy_vpn.providers.aws.aws_proxy.SSHClient") as ssh_cls:
                 ssh_cls.return_value.run_command.return_value = ("", squid_cfg, "")
-                with patch("auto_proxy_vpn.providers.aws.aws_proxy.AwsProxy.is_active", return_value=True):
-                    proxy = mgr.get_proxy_by_name("proxy1", is_async=True)
+                with patch(
+                    "auto_proxy_vpn.providers.aws.aws_proxy.AwsProxy.is_active",
+                    return_value=True,
+                ):
+                    proxy = mgr.get_proxy_by_name(
+                        "proxy1",
+                        auth={"user": "u1", "password": "p1"},
+                        is_async=True,
+                    )
 
         assert proxy.port == 3128
         assert proxy.user == "u1"
         assert proxy.password == "p1"
+
+    @pytest.mark.parametrize(
+        ("auth", "exception"),
+        [
+            (None, ProxyAuthRequiredError),
+            ({"user": "u1", "password": "wrong"}, ProxyAuthenticationError),
+        ],
+    )
+    def test_get_proxy_by_name_auth_errors(self, auth, exception):
+        mgr, sdk = _build_aws_manager()
+
+        client = MagicMock()
+        client.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-1",
+                            "NetworkInterfaces": [{"Groups": [{"GroupId": "sg-1"}]}],
+                            "PublicIpAddress": "54.0.0.1",
+                            "InstanceType": "t3.micro",
+                        }
+                    ]
+                }
+            ]
+        }
+        sdk["boto3"].client.return_value = client
+
+        squid_cfg = (
+            "http_port 3128\n"
+            f"{make_auth_metadata_comment('u1', 'p1')}\n"
+            "auth_param basic program /usr/local/bin/auto_proxy_vpn_basic_auth.py\n"
+        )
+
+        with patch.object(
+            mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]
+        ):
+            with patch("auto_proxy_vpn.providers.aws.aws_proxy.SSHClient") as ssh_cls:
+                ssh_cls.return_value.run_command.return_value = ("", squid_cfg, "")
+                with pytest.raises(exception):
+                    mgr.get_proxy_by_name("proxy1", auth=auth)
 
     def test_get_proxy_by_name_logs_reload_info(self):
         mgr, sdk = _build_aws_manager()
@@ -498,10 +579,15 @@ acl custom_ips src 1.2.3.4
 
         squid_cfg = "http_port 3128\nacl custom_ips src 1.2.3.4\n"
 
-        with patch.object(mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]):
+        with patch.object(
+            mgr, "get_running_proxy_names", return_value=[("proxy1", "us-east-1")]
+        ):
             with patch("auto_proxy_vpn.providers.aws.aws_proxy.SSHClient") as ssh_cls:
                 ssh_cls.return_value.run_command.return_value = ("", squid_cfg, "")
-                with patch("auto_proxy_vpn.providers.aws.aws_proxy.AwsProxy.is_active", return_value=True):
+                with patch(
+                    "auto_proxy_vpn.providers.aws.aws_proxy.AwsProxy.is_active",
+                    return_value=True,
+                ):
                     _ = mgr.get_proxy_by_name("proxy1", is_async=True)
 
         assert mgr.logger.info.called
@@ -521,7 +607,9 @@ acl custom_ips src 1.2.3.4
             def map(self, func, managers, regions):
                 return fake_all
 
-        with patch("auto_proxy_vpn.providers.aws.aws_proxy.ThreadPoolExecutor", _FakeExecutor):
+        with patch(
+            "auto_proxy_vpn.providers.aws.aws_proxy.ThreadPoolExecutor", _FakeExecutor
+        ):
             names = mgr.get_running_proxy_names()
             names_regions = mgr.get_running_proxy_names(return_region=True)
 
@@ -535,7 +623,10 @@ class TestAwsProxy:
         # Keep VM as pending for async path to avoid network probe in BaseProxy.is_active.
         sdk["instance"].state = {"Name": "pending"}
         proxy = None
-        with patch("auto_proxy_vpn.providers.aws.aws_proxy.AwsProxy.is_active", return_value=True):
+        with patch(
+            "auto_proxy_vpn.providers.aws.aws_proxy.AwsProxy.is_active",
+            return_value=True,
+        ):
             proxy = __import__(
                 "auto_proxy_vpn.providers.aws.aws_proxy", fromlist=["AwsProxy"]
             ).AwsProxy(
@@ -615,7 +706,10 @@ class TestAwsProxy:
         from auto_proxy_vpn.providers.aws.aws_proxy import AwsProxy
 
         sdk["instance"].state = {"Name": "running"}
-        with patch("auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active", return_value=True) as base_active:
+        with patch(
+            "auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active",
+            return_value=True,
+        ) as base_active:
             proxy = AwsProxy(
                 manager=mgr,
                 instance_id="i-1",
@@ -641,7 +735,10 @@ class TestAwsProxy:
 
         from auto_proxy_vpn.providers.aws.aws_proxy import AwsProxy
 
-        with patch("auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active", return_value=True):
+        with patch(
+            "auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active",
+            return_value=True,
+        ):
             _ = AwsProxy(
                 manager=mgr,
                 instance_id="i-1",
@@ -655,7 +752,10 @@ class TestAwsProxy:
                 reload=False,
             )
 
-        with patch("auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active", return_value=False):
+        with patch(
+            "auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active",
+            return_value=False,
+        ):
             _ = AwsProxy(
                 manager=mgr,
                 instance_id="i-2",
@@ -676,7 +776,10 @@ class TestAwsProxy:
         from auto_proxy_vpn.providers.aws.aws_proxy import AwsProxy
 
         sdk["instance"].state = {"Name": "pending"}
-        with patch("auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active", return_value=True):
+        with patch(
+            "auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active",
+            return_value=True,
+        ):
             proxy = AwsProxy(
                 manager=mgr,
                 instance_id="i-3",
@@ -697,7 +800,10 @@ class TestAwsProxy:
         from auto_proxy_vpn.providers.aws.aws_proxy import AwsProxy
 
         logger = MagicMock()
-        with patch("auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active", return_value=True):
+        with patch(
+            "auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active",
+            return_value=True,
+        ):
             proxy = AwsProxy(
                 manager=mgr,
                 instance_id="i-4",
@@ -712,7 +818,7 @@ class TestAwsProxy:
                 on_exit="destroy",
             )
 
-        instance = proxy._resource.Instance.return_value # type: ignore
+        instance = proxy._resource.Instance.return_value  # type: ignore
         proxy._stop_proxy(wait=True)
 
         instance.wait_until_terminated.assert_called_once()
@@ -723,7 +829,10 @@ class TestAwsProxy:
         from auto_proxy_vpn.providers.aws.aws_proxy import AwsProxy
 
         logger = MagicMock()
-        with patch("auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active", return_value=True):
+        with patch(
+            "auto_proxy_vpn.providers.aws.aws_proxy.BaseProxy.is_active",
+            return_value=True,
+        ):
             proxy = AwsProxy(
                 manager=mgr,
                 instance_id="i-5",

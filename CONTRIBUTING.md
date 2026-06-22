@@ -89,12 +89,9 @@ auto_proxy_vpn/
 │   ├── azure/               # Azure provider
 │   ├── digitalocean/        # DigitalOcean provider
 │   ├── google/              # Google Cloud provider
-│   ├── aws/                 # AWS provider
-│   ├── alibaba/             # (planned)
-│   └── oracle/              # (planned)
+│   └── aws/                 # AWS provider
 └── utils/
     ├── base_proxy.py        # BaseProxy, BaseProxyManager, ProxyBatch
-    ├── base_vpn.py          # Base VPN classes
     ├── exceptions.py        # Shared exceptions
     ├── files_utils.py       # Squid config generator
     ├── ssh_client.py        # SSH helpers
@@ -122,7 +119,7 @@ Nothing too rigid — just try to stay consistent with the existing code. Here's
 ### Type Hints
 
 - All public functions should have type hints for params and return values.
-- Use `X | Y` union syntax (we target Python 3.12+).
+- Use `X | Y` union syntax (we target Python 3.10+).
 - Use `typing.Literal` for constrained string args (e.g. `size`, `on_exit`).
 
 ### Docstrings
@@ -261,14 +258,17 @@ Create a `README.md` inside your provider package. Check out the existing ones (
 
 ## Testing
 
-The project has a comprehensive test suite built with [pytest](https://docs.pytest.org/). For the full testing guide — including how to run tests, write new ones, mock providers, and set up integration tests — see the **[Testing documentation](tests/README.md)**.
+Use [tox](https://tox.wiki/) for local testing. Tox installs the right dependencies and runs the same checks used by CI. The test suite itself is built with [pytest](https://docs.pytest.org/), but contributors should run it through tox. For the full testing guide — including how to run tests, write new ones, mock providers, and set up integration tests — see the **[Testing documentation](tests/README.md)**.
 
 The quick version:
 
 ```bash
-# Install test deps and run unit tests
-pip install -e ".[test]"
-pytest
+# Install tox and run the full local check suite
+pip install tox
+tox
+
+# Run only the default unit-test environment for your active Python
+tox -e py314 -- tests/unit/
 ```
 <!-- /hide testing -->
 ---
@@ -283,7 +283,24 @@ The project uses [Sphinx](https://www.sphinx-doc.org/) with the [Read the Docs t
 ### Install docs dependencies
 
 ```bash
-pip install sphinx sphinx_rtd_theme myst-parser sphinx-autodoc-typehints
+pip install sphinx sphinx_rtd_theme myst-parser
+```
+
+### Run checks with tox
+
+```bash
+pip install tox
+tox
+```
+
+Useful focused checks:
+
+```bash
+tox -e lint
+tox -e coverage
+tox -e docs
+tox -e package
+tox -e audit
 ```
 
 ### Build the docs locally

@@ -8,134 +8,180 @@ from re import search
 from auto_proxy_vpn.utils.files_utils import get_squid_file
 from auto_proxy_vpn.utils.exceptions import CountryNotAvailableException
 
+DIGITALOCEAN_TIMEOUT = 15
+
+
 def get_or_create_project(name: str, description: str, headers: dict[str, str]) -> str:
-    '''
+    """
     Creates the project if doesn't exist and sets the project as default. Returns the project id.
-    '''
+    """
     try:
-        projects = get('https://api.digitalocean.com/v2/projects', headers=headers, timeout=15)
-    except:
-        raise ConnectionError('Error connecting to DigitalOcean.')
+        projects = get(
+            "https://api.digitalocean.com/v2/projects",
+            headers=headers,
+            timeout=DIGITALOCEAN_TIMEOUT,
+        )
+    except Exception:
+        raise ConnectionError("Error connecting to DigitalOcean.")
     if projects.status_code >= 400:
-        raise ConnectionError('Error connecting to DigitalOcean.')
-    projects = projects.json()['projects']
-    project_id = [x for x in projects if x['name'] == name]
-    if not project_id or not project_id[0]['is_default']:
+        raise ConnectionError("Error connecting to DigitalOcean.")
+    projects = projects.json()["projects"]
+    project_id = [x for x in projects if x["name"] == name]
+    if not project_id or not project_id[0]["is_default"]:
         if not project_id:
             data_proxy = {
                 "name": name,
                 "description": description,
                 "purpose": "Service or API",
                 "environment": "Production",
-                "is_default": False
+                "is_default": False,
             }
-            project_id = [post('https://api.digitalocean.com/v2/projects', headers=headers, json=data_proxy).json()['project']]
-        
-        data = {
-            "is_default": True
-        }
-        project_id = patch('https://api.digitalocean.com/v2/projects/'+project_id[0]['id'], headers=headers, json=data).json()['project']['id']
+            project_id = [
+                post(
+                    "https://api.digitalocean.com/v2/projects",
+                    headers=headers,
+                    json=data_proxy,
+                    timeout=DIGITALOCEAN_TIMEOUT,
+                ).json()["project"]
+            ]
+
+        data = {"is_default": True}
+        project_id = patch(
+            "https://api.digitalocean.com/v2/projects/" + project_id[0]["id"],
+            headers=headers,
+            json=data,
+            timeout=DIGITALOCEAN_TIMEOUT,
+        ).json()["project"]["id"]
     else:
-        project_id = project_id[0]['id']
-        
+        project_id = project_id[0]["id"]
+
     return project_id
 
-def get_or_create_ssh_keys(ssh_keys: list[dict[str, str] | str] | dict[str, str] | str, headers: dict[str, str]) -> list[int]:
-    '''
+
+def get_or_create_ssh_keys(
+    ssh_keys: list[dict[str, str] | str] | dict[str, str] | str, headers: dict[str, str]
+) -> list[int]:
+    """
     Gets or creates ssh keys in DigitalOcean. If no ssh key then a dummy one will be created.
-    '''
+    """
     if not ssh_keys:
-        raise ValueError('At least one ssh key is required to create a proxy in DigitalOcean. Please provide at least one ssh key or create a dummy one.')
-    
+        raise ValueError(
+            "At least one ssh key is required to create a proxy in DigitalOcean. Please provide at least one ssh key or create a dummy one."
+        )
+
     if isinstance(ssh_keys, dict) or isinstance(ssh_keys, str):
         ssh_keys = [ssh_keys]
-    
+
     if not isinstance(ssh_keys, list):
-        raise TypeError('Bad ssh_key')
-    
-    all_ssh_keys = get('https://api.digitalocean.com/v2/account/keys', headers=headers).json()['ssh_keys']
-    
+        raise TypeError("Bad ssh_key")
+
+    all_ssh_keys = get(
+        "https://api.digitalocean.com/v2/account/keys",
+        headers=headers,
+        timeout=DIGITALOCEAN_TIMEOUT,
+    ).json()["ssh_keys"]
+
     keys = []
     for item in ssh_keys:
         if isinstance(item, dict):
-            if (len(item.keys()) > 2 or 'name' not in item.keys() or 'public_key' not in item.keys()):
-                raise KeyError('ssh dict must have only name and public_key')
-            key = [x for x in all_ssh_keys if x['name'] == item['name']]
+            if (
+                len(item.keys()) > 2
+                or "name" not in item.keys()
+                or "public_key" not in item.keys()
+            ):
+                raise KeyError("ssh dict must have only name and public_key")
+            key = [x for x in all_ssh_keys if x["name"] == item["name"]]
             if not key:
-                key = post('https://api.digitalocean.com/v2/account/keys', headers=headers, json=item).json()
-                key = key['ssh_key']['id']
+                key = post(
+                    "https://api.digitalocean.com/v2/account/keys",
+                    headers=headers,
+                    json=item,
+                    timeout=DIGITALOCEAN_TIMEOUT,
+                ).json()
+                key = key["ssh_key"]["id"]
             else:
-                key = key[0]['id']
+                key = key[0]["id"]
         elif isinstance(item, str):
-            keys_found = [x for x in all_ssh_keys if x['name'] == item]
+            keys_found = [x for x in all_ssh_keys if x["name"] == item]
             if not keys_found:
-                raise NameError('ssh key '+ str(item) + " doesn't exists in DigitalOcean. To create a new ssh key you can use the following format in the ssh_keys parameter: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}")
-            key = keys_found[0]['id']
+                raise NameError(
+                    "ssh key "
+                    + str(item)
+                    + " doesn't exists in DigitalOcean. To create a new ssh key you can use the following format in the ssh_keys parameter: {'name': 'ssh key name', 'public_key': 'ssh-rsa AAAAABBBBBCCCC...'}"
+                )
+            key = keys_found[0]["id"]
         else:
-            raise TypeError('Bad ssh_key')
-        
+            raise TypeError("Bad ssh_key")
+
         if key not in keys:
             keys.append(key)
-    
+
     return keys
 
-def get_servers_and_size(server_size: str, active_servers: list[dict], servers: list[str], vpn: bool = False) -> Tuple[str, list[str]]:
-    '''
-    Get the server size slug and the list of servers that support it
-    '''
-    
-    if server_size not in ['small', 'medium', 'large']:
-        raise NameError('Not valid server size')
-    
-    if server_size == 'small':
-        if vpn:
-            return 's-1vcpu-1gb', servers
-        return 's-1vcpu-512mb-10gb', [x['slug'] for x in active_servers if 's-1vcpu-512mb-10gb' in x['sizes']]
-    
-    elif server_size == 'medium':
-        if vpn:
-            return 's-1vcpu-2gb', servers
-        return 's-1vcpu-1gb', servers
-    
-    else:
-        if vpn:
-            return 's-2vcpu-4gb', servers
-        return 's-1vcpu-2gb', servers
 
-def get_next_droplet_name(headers: dict[str, str], name: str = '', is_vpn: bool = False) -> str:
-    '''
-    Get next avaliable proxy or vpn name.
-    '''
+def get_servers_and_size(
+    server_size: str, active_servers: list[dict], servers: list[str]
+) -> Tuple[str, list[str]]:
+    """
+    Get the server size slug and the list of servers that support it
+    """
+
+    if server_size not in ["small", "medium", "large"]:
+        raise NameError("Not valid server size")
+
+    if server_size == "small":
+        return "s-1vcpu-512mb-10gb", [
+            x["slug"] for x in active_servers if "s-1vcpu-512mb-10gb" in x["sizes"]
+        ]
+
+    elif server_size == "medium":
+        return "s-1vcpu-1gb", servers
+
+    else:
+        return "s-1vcpu-2gb", servers
+
+
+def get_next_droplet_name(headers: dict[str, str], name: str = "") -> str:
+    """
+    Get next avaliable proxy name.
+    """
     try:
-        droplets = get(f'https://api.digitalocean.com/v2/droplets?tag_name={"proxy" if not is_vpn else "vpn"}', headers=headers).json()['droplets']
-    except:
-        raise ConnectionError('Error connecting to DigitalOcean.')
-    
+        droplets = get(
+            "https://api.digitalocean.com/v2/droplets?tag_name=proxy",
+            headers=headers,
+            timeout=DIGITALOCEAN_TIMEOUT,
+        ).json()["droplets"]
+    except Exception:
+        raise ConnectionError("Error connecting to DigitalOcean.")
+
     if name:
-        if [x['name'] for x in droplets if x['name'] == name]:
-            raise NameError(f"{'VPN' if is_vpn else 'Proxy'} {name} already exists!")
+        if [x["name"] for x in droplets if x["name"] == name]:
+            raise NameError(f"Proxy {name} already exists!")
         return name
-    
-    names = sorted([x['name'] for x in droplets if search(rf'^{ "vpn" if is_vpn else "proxy" }\d+$', x['name'])])
+
+    names = sorted([x["name"] for x in droplets if search(r"^proxy\d+$", x["name"])])
     if names:
         last_name = names[-1]
-        return f'{"vpn" if is_vpn else "proxy"}{str(int(last_name[3 if is_vpn else 5:])+1)}'
-    return f'{"vpn" if is_vpn else "proxy"}1'
+        return f"proxy{str(int(last_name[5:]) + 1)}"
+    return "proxy1"
 
-def start_proxy(name: str,
-                image: str,
-                region: str,
-                size: str,
-                port: int,
-                ssh_keys: list[str],
-                headers: dict[str, str],
-                regions: list[str],
-                logger: Optional[Logger],
-                allowed_ips: list[str] = [],
-                user: str = '',
-                password: str = '',
-                is_async: bool = False,
-                retry: bool = True) -> Tuple[int, str, bool]:
+
+def start_proxy(
+    name: str,
+    image: str,
+    region: str,
+    size: str,
+    port: int,
+    ssh_keys: list[str],
+    headers: dict[str, str],
+    regions: list[str],
+    logger: Optional[Logger],
+    allowed_ips: list[str] | None = None,
+    user: str = "",
+    password: str = "",
+    is_async: bool = False,
+    retry: bool = True,
+) -> Tuple[int, str, bool]:
     """Create a DigitalOcean droplet configured as an HTTP proxy.
 
     The function provisions a droplet with a Squid startup script, optionally
@@ -188,8 +234,11 @@ def start_proxy(name: str,
         If no suitable region is available and ``retry`` is False (or no
         fallback remains).
     """
-    
-    image_commands = get_squid_file(port, user, password, allowed_ips, ssh_keys=ssh_keys)
+
+    allowed_ips = allowed_ips or []
+    image_commands = get_squid_file(
+        port, user, password, allowed_ips, ssh_keys=ssh_keys
+    )
 
     data = {
         "name": name,
@@ -198,11 +247,16 @@ def start_proxy(name: str,
         "image": image,
         "tags": ["proxy"],
         "user_data": image_commands,
-        "with_droplet_agent": False
+        "with_droplet_agent": False,
     }
-    
-    new_droplet = post('https://api.digitalocean.com/v2/droplets', headers=headers, json=data)
-    
+
+    new_droplet = post(
+        "https://api.digitalocean.com/v2/droplets",
+        headers=headers,
+        json=data,
+        timeout=DIGITALOCEAN_TIMEOUT,
+    )
+
     if new_droplet.status_code != 202:
         if new_droplet.status_code == 422:
             if logger:
@@ -210,45 +264,88 @@ def start_proxy(name: str,
             regions.remove(region)
             local_regions = [x for x in regions if x[:-1] == region[:-1]]
             if local_regions:
-                region = choice(local_regions) # type: ignore
+                region = choice(local_regions)  # type: ignore
                 if logger:
-                    logger.info(f"Starting a new DigitalOcean proxy in the region {region}...")
-                return start_proxy(name, image, region, size, port, ssh_keys, headers, regions, logger, allowed_ips, user, password, is_async, retry)
+                    logger.info(
+                        f"Starting a new DigitalOcean proxy in the region {region}..."
+                    )
+                return start_proxy(
+                    name,
+                    image,
+                    region,
+                    size,
+                    port,
+                    ssh_keys,
+                    headers,
+                    regions,
+                    logger,
+                    allowed_ips,
+                    user,
+                    password,
+                    is_async,
+                    retry,
+                )
             if logger:
-                logger.warning(f"No more servers in {region[:-1]} are avaliable in DigitalOcean.")
-                
+                logger.warning(
+                    f"No more servers in {region[:-1]} are avaliable in DigitalOcean."
+                )
+
             if retry:
                 region = choice(regions)
                 if logger:
-                    logger.info(f"Starting a new DigitalOcean proxy in the region {region}...")
-                return start_proxy(name, image, region, size, port, ssh_keys, headers, regions, logger, allowed_ips, user, password, is_async, retry)
+                    logger.info(
+                        f"Starting a new DigitalOcean proxy in the region {region}..."
+                    )
+                return start_proxy(
+                    name,
+                    image,
+                    region,
+                    size,
+                    port,
+                    ssh_keys,
+                    headers,
+                    regions,
+                    logger,
+                    allowed_ips,
+                    user,
+                    password,
+                    is_async,
+                    retry,
+                )
             else:
-                raise CountryNotAvailableException(f"The region {region[:-1]} isn't avaliable in DigitalOcean!")
-        return 0, '', True
+                raise CountryNotAvailableException(
+                    f"The region {region[:-1]} isn't avaliable in DigitalOcean!"
+                )
+        return 0, "", True
     else:
-        new_droplet = new_droplet.json()['droplet']
-    
+        new_droplet = new_droplet.json()["droplet"]
+
     times = 0
     error = True
     if not is_async:
         sleep(15)
-        while new_droplet['status'] != 'active' and times < 10:
+        while new_droplet["status"] != "active" and times < 10:
             try:
-                new_droplet = get('https://api.digitalocean.com/v2/droplets/'+str(new_droplet['id']), headers=headers).json()['droplet']
+                new_droplet = get(
+                    "https://api.digitalocean.com/v2/droplets/"
+                    + str(new_droplet["id"]),
+                    headers=headers,
+                    timeout=DIGITALOCEAN_TIMEOUT,
+                ).json()["droplet"]
                 error = False
-            except:
+            except Exception:
                 times += 1
                 sleep(5)
-    
+
     try:
-        ip = [x for x in new_droplet['networks']['v4'] if x['type'] == 'public']
+        ip = [x for x in new_droplet["networks"]["v4"] if x["type"] == "public"]
         if ip:
-            ip = ip[0]['ip_address']
+            ip = ip[0]["ip_address"]
         else:
-            ip = ''
+            ip = ""
             error = True
-    except:
-        ip = ''
+    except Exception:
+        ip = ""
         error = True
-    
-    return new_droplet['id'], ip, error
+
+    return new_droplet["id"], ip, error

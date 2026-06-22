@@ -14,6 +14,7 @@ from tests.conftest import StubProxyManager
 # RandomManagerPicker
 # ============================================================================
 
+
 class TestRandomManagerPicker:
     """Round-robin random manager selection."""
 
@@ -65,6 +66,7 @@ class TestRandomManagerPicker:
 # ProxyPool — init validation
 # ============================================================================
 
+
 class TestProxyPoolInit:
     """Tests for ProxyPool constructor validation."""
 
@@ -73,19 +75,21 @@ class TestProxyPoolInit:
             ProxyPool()
 
     def test_duplicate_configs_raises(self):
-        c1 = DigitalOceanConfig(token="same-tok", ssh_key='key')
-        c2 = DigitalOceanConfig(token="same-tok", ssh_key='key')
+        c1 = DigitalOceanConfig(token="same-tok", ssh_key="key")
+        c2 = DigitalOceanConfig(token="same-tok", ssh_key="key")
         with pytest.raises(ValueError, match="Duplicate"):
             # We need to mock the manager initialization to avoid real API calls
-            with patch("auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager") as mock_get:
+            with patch(
+                "auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager"
+            ) as mock_get:
                 mock_cls = MagicMock()
                 mock_get.return_value = mock_cls
                 ProxyPool(c1, c2)
 
     def test_different_configs_same_provider_ok(self):
         """Two configs with different tokens for the same provider should be valid."""
-        c1 = DigitalOceanConfig(token="tok-1", ssh_key='key')
-        c2 = DigitalOceanConfig(token="tok-2", ssh_key='key')
+        c1 = DigitalOceanConfig(token="tok-1", ssh_key="key")
+        c2 = DigitalOceanConfig(token="tok-2", ssh_key="key")
         with patch("auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager") as mock_get:
             mock_cls = MagicMock()
             mock_cls.from_config.return_value = StubProxyManager("do")
@@ -100,7 +104,7 @@ class TestProxyPoolCreateOne:
     @pytest.fixture
     def pool_with_stubs(self, stub_managers):
         """Build a ProxyPool with injected stub managers (bypassing real init)."""
-        c1 = DigitalOceanConfig(token="tok-a", ssh_key='key')
+        c1 = DigitalOceanConfig(token="tok-a", ssh_key="key")
         with patch("auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager") as mock_get:
             mock_cls = MagicMock()
             mock_cls.from_config.return_value = stub_managers[0]
@@ -133,7 +137,7 @@ class TestProxyPoolCreateBatch:
 
     @pytest.fixture
     def pool_with_stubs(self, stub_managers):
-        c1 = DigitalOceanConfig(token="tok-b", ssh_key='key')
+        c1 = DigitalOceanConfig(token="tok-b", ssh_key="key")
         with patch("auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager") as mock_get:
             mock_cls = MagicMock()
             mock_cls.from_config.return_value = stub_managers[0]
@@ -176,21 +180,23 @@ class TestProxyPoolLogging:
     def test_initializes_shared_logger_when_log_enabled_and_no_logger(self):
         config = DigitalOceanConfig(token="tok-log", ssh_key="key")
 
-        with patch("auto_proxy_vpn.proxy_pool.basicConfig") as mock_basic_config:
-            with patch("auto_proxy_vpn.proxy_pool.getLogger") as mock_get_logger:
-                with patch("auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager") as mock_get_manager:
-                    mock_logger = MagicMock()
-                    mock_get_logger.return_value = mock_logger
+        with patch("auto_proxy_vpn.proxy_pool.get_proxy_logger") as mock_get_logger:
+            with patch(
+                "auto_proxy_vpn.proxy_pool.ProxyManagers.get_manager"
+            ) as mock_get_manager:
+                mock_logger = MagicMock()
+                mock_get_logger.return_value = mock_logger
 
-                    manager_cls = MagicMock()
-                    manager_cls.from_config.return_value = StubProxyManager("do")
-                    mock_get_manager.return_value = manager_cls
+                manager_cls = MagicMock()
+                manager_cls.from_config.return_value = StubProxyManager("do")
+                mock_get_manager.return_value = manager_cls
 
-                    pool = ProxyPool(config, log=True, logger=None)
+                pool = ProxyPool(config, log=True, logger=None)
 
         assert len(pool.managers) == 1
-        mock_basic_config.assert_called_once()
-        mock_get_logger.assert_called_once_with("proxy_logger")
+        mock_get_logger.assert_called_once()
+        runtime_config = mock_get_manager.return_value.from_config.call_args.args[1]
+        assert runtime_config.logger is mock_logger
 
 
 class TestProxyPoolRunningNames:
@@ -316,4 +322,4 @@ class TestProxyPoolRegions:
         pool = self._build_pool_with_managers([(CloudProvider.DIGITALOCEAN, do_mgr)])
 
         with pytest.raises(ValueError, match="Size xlarge is not valid"):
-            pool.get_regions_by_size(CloudProvider.DIGITALOCEAN, "xlarge") # type: ignore
+            pool.get_regions_by_size(CloudProvider.DIGITALOCEAN, "xlarge")  # type: ignore

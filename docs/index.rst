@@ -1,7 +1,7 @@
 auto_proxy_vpn
 ==============
 
-On-demand proxies and VPNs across multiple cloud providers — from a single Python call.
+On-demand HTTP(S) proxies across multiple cloud providers — from a single Python call.
 
 .. toctree::
    :maxdepth: 2
@@ -35,4 +35,3 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`modindex`
-

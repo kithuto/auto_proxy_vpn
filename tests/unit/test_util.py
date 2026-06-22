@@ -37,7 +37,11 @@ class TestGetPublicIp:
     def test_raises_when_all_services_fail(self):
         with patch(
             "auto_proxy_vpn.utils.util.get",
-            side_effect=[RequestException("x"), RequestException("y"), RequestException("z")],
+            side_effect=[
+                RequestException("x"),
+                RequestException("y"),
+                RequestException("z"),
+            ],
         ):
             with pytest.raises(RuntimeError, match="public IP"):
                 get_public_ip(timeout=1)
