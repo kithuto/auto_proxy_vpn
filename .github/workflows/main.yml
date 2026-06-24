@@ -18,6 +18,54 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  version-check:
+    name: Check Package Version Change
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+      version: ${{ steps.version.outputs.version }}
+      previous_version: ${{ steps.version.outputs.previous_version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compare pyproject version with previous main revision
+        id: version
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          def read_version(text: str) -> str:
+              return tomllib.loads(text)["project"]["version"]
+
+          package_version = read_version(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+          previous = ""
+          before = os.environ.get("BEFORE_SHA", "")
+          if before and before != "0" * 40:
+              result = subprocess.run(
+                  ["git", "show", f"{before}:pyproject.toml"],
+                  capture_output=True,
+                  check=False,
+                  text=True,
+              )
+              if result.returncode == 0:
+                  previous = read_version(result.stdout)
+
+          changed = previous != package_version
+          print(f"version={package_version}")
+          print(f"previous_version={previous}")
+          print(f"changed={str(changed).lower()}")
+          PY
+
   unit-tests:
     name: Unit Tests (Python 3.14)
     runs-on: ubuntu-latest
@@ -43,12 +91,15 @@ jobs:
           python -m tox -e py314 -- tests/unit/ -v --tb=short --junitxml=junit-results.xml --cov=auto_proxy_vpn --cov-report=xml
 
       - name: Run quality checks
-        run: python -m tox -e lint,coverage,docs,package,audit
+        run: python -m tox -e lint,coverage,docs,audit
 
   build:
     name: Build Distributions
     runs-on: ubuntu-latest
-    needs: unit-tests
+    needs:
+      - version-check
+      - unit-tests
+    if: needs.version-check.outputs.changed == 'true'
 
     steps:
       - name: Checkout repository
@@ -78,12 +129,12 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - version-check
+      - build
+    if: needs.version-check.outputs.changed == 'true'
     permissions:
       contents: write
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Checkout repository
@@ -97,37 +148,35 @@ jobs:
           name: dist-artifacts
           path: dist
 
-      - name: Read package version from built distributions
-        id: version
-        run: |
-          VERSION=$(awk -F'"' '/^version = / { print $2; exit }' pyproject.toml)
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-
       - name: Ensure tag does not already exist
         run: |
-          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
-            echo "Tag ${{ steps.version.outputs.tag }} already exists. Bump the package version before releasing."
+          TAG="v${{ needs.version-check.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Bump the package version before releasing."
             exit 1
           fi
 
       - name: Create and push git tag
         run: |
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
+          TAG="v${{ needs.version-check.outputs.version }}"
+          git tag "$TAG"
+          git push origin "$TAG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Release ${{ steps.version.outputs.tag }}
+          tag_name: v${{ needs.version-check.outputs.version }}
+          name: Release v${{ needs.version-check.outputs.version }}
           generate_release_notes: true
           files: dist/*
 
   publish-pypi:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    needs: release
+    needs:
+      - version-check
+      - release
+    if: needs.version-check.outputs.changed == 'true'
     permissions:
       id-token: write
 

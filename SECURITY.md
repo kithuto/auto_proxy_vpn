@@ -25,12 +25,22 @@ SSH keys are passed through config dataclasses and used via `subprocess` to conn
 - Use **dedicated SSH key pairs** for proxy VMs — don't reuse your personal keys.
 - Store private keys with restrictive permissions (`chmod 600`).
 
-### Proxy Credentials in Cloud-Init
+### Proxy Authentication Metadata
 
-Squid proxy usernames and passwords are embedded in the cloud-init script that runs on VM creation. This means they're visible in the VM's cloud-init metadata.
+When basic auth is enabled, proxy passwords are not stored in plaintext in
+`squid.conf`, cloud-init metadata, startup scripts, logs, or diagnostic output.
+The generated Squid configuration stores only secure auth metadata with the
+username and a PBKDF2-SHA256 password hash. The password itself is kept only in
+memory while the proxy object is active so `get_proxy_str()` and `get_proxy()`
+can return a usable authenticated proxy URL.
 
-- Be aware that anyone with access to the VM (or its cloud console) can see these credentials.
-- Use `on_exit='destroy'` to clean up VMs when you're done, reducing the exposure window.
+- Reconnecting to an authenticated proxy with `get_proxy_by_name(...)` requires
+  passing `auth={"user": "...", "password": "..."}` again.
+- If the supplied credentials do not match the stored hash, recovery fails.
+- Proxies created with the old insecure plaintext metadata format are not
+  supported; recreate them instead of relying on legacy recovery.
+- Use unique proxy passwords and prefer `on_exit='destroy'` for disposable
+  workloads to reduce the exposure window.
 
 ## Out of Scope
 

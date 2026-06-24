@@ -59,6 +59,7 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+.ruff_cache/
 
 # PyBuilder
 target/
@@ -100,6 +101,7 @@ dmypy.json
 
 # docs
 docs/_build/
+future-roadmap.md
 
 .env
 *.json
