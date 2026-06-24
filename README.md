@@ -337,6 +337,10 @@ proxy = manager.get_proxy(
 # Only listed IPs (+ your current IP, auto-added) can connect
 ```
 
+Proxy passwords are not persisted in plaintext. For authenticated proxies,
+only a password hash is stored remotely, so reconnecting later requires passing
+the same `auth` credentials to `get_proxy_by_name(...)`.
+
 ### Asynchronous Creation
 
 Return immediately without blocking on VM provisioning:
@@ -363,7 +367,8 @@ proxy.close()       # resources are NOT deleted
 
 # Later session — reconnect
 proxy = manager.get_proxy_by_name(
-    "proxy1",
+    name="proxy1",
+    is_async=False,
     auth={"user": "alice", "password": "secret"},  # only needed for auth proxies
     on_exit="destroy",
 )
@@ -545,8 +550,8 @@ All provider managers share the same `get_proxy()` signature:
 | `port` | `int` | `0` (random) | Proxy TCP port (random 10000–65000 if 0) |
 | `size` | `"small" \| "medium" \| "large"` | `"medium"` | VM/droplet size tier |
 | `region` | `str` | `""` (random) | Cloud region/zone |
-| `auth` | `dict` | `{}` | `{"user": ..., "password": ...}` for basic auth |
-| `allowed_ips` | `str \| list[str]` | `[]` | Allowed source IPs (your IP auto-added) |
+| `auth` | `dict \| None` | `None` | `{"user": ..., "password": ...}` for basic auth |
+| `allowed_ips` | `str \| list[str] \| None` | `None` | Allowed source IPs (your IP auto-added) |
 | `is_async` | `bool` | `False` | Return before VM is fully ready |
 | `retry` | `bool` | `True` | Retry in another region on failure |
 | `proxy_name` | `str` | `""` | Custom name (auto-generated if empty) |

@@ -219,8 +219,8 @@ Reload a previously created (and still running) proxy by its instance name.
 ```python
 proxy = manager.get_proxy_by_name(
     name="proxy1",         # str — existing instance name (Name tag)
-    auth=None,             # {"user": ..., "password": ...} | None — required for auth proxies
     is_async=False,         # bool
+    auth=None,             # {"user": ..., "password": ...} | None — required for auth proxies
     on_exit="destroy",     # "destroy" | "keep"
 )
 ```
@@ -313,7 +313,8 @@ proxy.close()  # instance is NOT deleted
 
 # Later, reconnect to it:
 proxy = manager.get_proxy_by_name(
-    "proxy1",
+    name="proxy1",
+    is_async=False,
     auth={"user": "alice", "password": "secret"},  # only needed for auth proxies
     on_exit="destroy",
 )
